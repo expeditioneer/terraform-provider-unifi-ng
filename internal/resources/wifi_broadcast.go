@@ -61,10 +61,14 @@ type wifiBroadcastAPI struct {
 	SecurityConfiguration map[string]interface{} `json:"securityConfiguration,omitempty"`
 	HideName              bool     `json:"hideName"`
 	ClientIsolationEnabled bool    `json:"clientIsolationEnabled"`
-	BandSteeringEnabled    bool    `json:"bandSteeringEnabled"`
+	BandSteeringEnabled    *bool   `json:"bandSteeringEnabled,omitempty"`
 	FastRoamingEnabled     bool    `json:"fastRoamingEnabled,omitempty"` // deprecated top-level
 	MulticastToUnicastConversionEnabled bool `json:"multicastToUnicastConversionEnabled"`
 	BroadcastingFrequenciesGHz []float64 `json:"broadcastingFrequenciesGHz,omitempty"`
+	ArpProxyEnabled      bool `json:"arpProxyEnabled"`
+	UapsdEnabled         bool `json:"uapsdEnabled"`
+	BssTransitionEnabled bool `json:"bssTransitionEnabled"`
+	AdvertiseDeviceName  bool `json:"advertiseDeviceName"`
 }
 
 func (r *WifiBroadcastResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -263,8 +267,28 @@ func wifiModelToAPI(ctx context.Context, m WifiBroadcastModel) (*wifiBroadcastAP
 		},
 		HideName:               m.HideName.ValueBool(),
 		ClientIsolationEnabled: m.ClientIsolation.ValueBool(),
-		BandSteeringEnabled:    m.BandSteering.ValueBool(),
 		MulticastToUnicastConversionEnabled: m.MulticastToUnicast.ValueBool(),
+	}
+
+	// Band steering — only include when true (API rejects false with single band)
+	if !m.BandSteering.IsNull() && !m.BandSteering.IsUnknown() && m.BandSteering.ValueBool() {
+		bs := true
+		p.BandSteeringEnabled = &bs
+	}
+
+	// WPA3-specific security configuration defaults
+	secType := m.SecurityType.ValueString()
+	if secType == "WPA2_WPA3_PERSONAL" || secType == "WPA3_PERSONAL" {
+		pmfMode := "OPTIONAL"
+		if secType == "WPA3_PERSONAL" {
+			pmfMode = "REQUIRED"
+		}
+		p.SecurityConfiguration["pmfMode"] = pmfMode
+		p.SecurityConfiguration["saeConfiguration"] = map[string]interface{}{
+			"anticloggingThresholdSeconds": 5,
+			"syncTimeSeconds":             5,
+		}
+		p.SecurityConfiguration["wpa3FastRoamingEnabled"] = false
 	}
 
 	if len(m.PresharedKeys) > 0 {
@@ -320,7 +344,9 @@ func wifiAPIToModel(ctx context.Context, p *wifiBroadcastAPI, m *WifiBroadcastMo
 		listVal, _ := types.ListValueFrom(ctx, types.StringType, []string{})
 		m.FrequenciesGHz = listVal
 	} else {
-		m.BandSteering = types.BoolValue(p.BandSteeringEnabled)
+		if p.BandSteeringEnabled != nil {
+			m.BandSteering = types.BoolValue(*p.BandSteeringEnabled)
+		}
 	}
 
 	if p.Network != nil {
