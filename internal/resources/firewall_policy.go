@@ -245,9 +245,13 @@ func policyModelToAPI(m FirewallPolicyModel) (*firewallPolicyAPI, error) {
 		Enabled:        &enabled,
 		LoggingEnabled: m.LoggingEnabled.ValueBool(),
 		Action: map[string]interface{}{
-			"type":               m.ActionType.ValueString(),
-			"allowReturnTraffic": m.AllowReturnTraffic.ValueBool(),
+			"type": m.ActionType.ValueString(),
 		},
+	}
+
+	// Only include allowReturnTraffic for ALLOW actions (API rejects it for BLOCK)
+	if m.ActionType.ValueString() == "ALLOW" {
+		p.Action["allowReturnTraffic"] = m.AllowReturnTraffic.ValueBool()
 	}
 
 	if !m.Index.IsNull() && !m.Index.IsUnknown() {
