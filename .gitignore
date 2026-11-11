@@ -12,3 +12,6 @@ specs/*-normalized.json
 
 # Go
 vendor/
+
+# direnv
+.direnv/
