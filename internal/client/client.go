@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 // Client is a UniFi Integration API client.
@@ -28,7 +29,7 @@ func New(apiKey, apiURL, siteID string, allowInsecure bool) *Client {
 	}
 	return &Client{
 		apiKey:  apiKey,
-		baseURL: apiURL,
+		baseURL: strings.TrimRight(apiURL, "/"),
 		siteID:  siteID,
 		httpClient: &http.Client{
 			Transport: transport,
