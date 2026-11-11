@@ -10,8 +10,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
@@ -49,7 +49,7 @@ type WifiBroadcastModel struct {
 	BandSteering       types.Bool     `tfsdk:"band_steering"`   // STANDARD only
 	FastRoaming        types.Bool     `tfsdk:"fast_roaming"`    // STANDARD only
 	MulticastToUnicast types.Bool     `tfsdk:"multicast_to_unicast"`
-	FrequenciesGHz     types.List     `tfsdk:"frequencies_ghz"` // STANDARD only
+	FrequenciesGHz     types.Set      `tfsdk:"frequencies_ghz"` // STANDARD only
 }
 
 type wifiBroadcastAPI struct {
@@ -148,11 +148,11 @@ func (r *WifiBroadcastResource) Schema(_ context.Context, _ resource.SchemaReque
 				Optional: true, Computed: true, Default: booldefault.StaticBool(false),
 				MarkdownDescription: "Convert multicast traffic to unicast.",
 			},
-			"frequencies_ghz": schema.ListAttribute{
+			"frequencies_ghz": schema.SetAttribute{
 				ElementType:         types.StringType,
 				Optional:            true,
 				Computed:            true,
-				PlanModifiers:       []planmodifier.List{listplanmodifier.UseStateForUnknown()},
+				PlanModifiers:       []planmodifier.Set{setplanmodifier.UseStateForUnknown()},
 				MarkdownDescription: "Broadcasting frequencies: `2.4`, `5`, `6`.",
 			},
 		},
@@ -341,8 +341,8 @@ func wifiAPIToModel(ctx context.Context, p *wifiBroadcastAPI, m *WifiBroadcastMo
 	if p.Type == "IOT_OPTIMIZED" {
 		m.BandSteering = types.BoolNull()
 		m.FastRoaming = types.BoolNull()
-		listVal, _ := types.ListValueFrom(ctx, types.StringType, []string{})
-		m.FrequenciesGHz = listVal
+		setVal, _ := types.SetValueFrom(ctx, types.StringType, []string{})
+		m.FrequenciesGHz = setVal
 	} else {
 		if p.BandSteeringEnabled != nil {
 			m.BandSteering = types.BoolValue(*p.BandSteeringEnabled)
@@ -400,9 +400,9 @@ func wifiAPIToModel(ctx context.Context, p *wifiBroadcastAPI, m *WifiBroadcastMo
 			freqStrs = append(freqStrs, fmt.Sprintf("%.0f", f))
 		}
 	}
-	listVal, d := types.ListValueFrom(ctx, types.StringType, freqStrs)
+	setVal, d := types.SetValueFrom(ctx, types.StringType, freqStrs)
 	diags.Append(d...)
-	m.FrequenciesGHz = listVal
+	m.FrequenciesGHz = setVal
 
 	return diags
 }
