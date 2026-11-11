@@ -30,16 +30,16 @@ func NewTrafficMatchingListResource() resource.Resource {
 type TrafficMatchingListModel struct {
 	ID    types.String `tfsdk:"id"`
 	Name  types.String `tfsdk:"name"`
-	Type  types.String `tfsdk:"type"` // PORTS | IP_ADDRESSES
+	Type  types.String `tfsdk:"type"`  // PORTS | IP_ADDRESSES
 	Items types.List   `tfsdk:"items"` // list of strings — port numbers or CIDRs/IPs
 }
 
 // tmlAPIItem represents one entry in the list.
 type tmlAPIItem struct {
-	Type  string `json:"type"`           // PORT_NUMBER | PORT_RANGE | IP_ADDRESS | IP_SUBNET
+	Type  string `json:"type"`            // PORT_NUMBER | PORT_RANGE | IP_ADDRESS | IP_SUBNET
 	Value any    `json:"value,omitempty"` // int for ports, string for IPs
-	From  *int   `json:"from,omitempty"` // port range start
-	To    *int   `json:"to,omitempty"`   // port range end
+	From  *int   `json:"from,omitempty"`  // port range start
+	To    *int   `json:"to,omitempty"`    // port range end
 }
 
 type tmlAPI struct {

@@ -22,11 +22,11 @@ func NewDevicesDataSource() datasource.DataSource {
 }
 
 type DeviceItem struct {
-	ID       types.String `tfsdk:"id"`
-	Name     types.String `tfsdk:"name"`
-	Model    types.String `tfsdk:"model"`
-	MAC      types.String `tfsdk:"mac"`
-	Adopted  types.Bool   `tfsdk:"adopted"`
+	ID      types.String `tfsdk:"id"`
+	Name    types.String `tfsdk:"name"`
+	Model   types.String `tfsdk:"model"`
+	MAC     types.String `tfsdk:"mac"`
+	Adopted types.Bool   `tfsdk:"adopted"`
 }
 
 type DevicesModel struct {

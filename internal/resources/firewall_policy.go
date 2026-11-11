@@ -29,19 +29,19 @@ func NewFirewallPolicyResource() resource.Resource {
 
 // FirewallPolicyModel is the Terraform schema model.
 type FirewallPolicyModel struct {
-	ID                  types.String `tfsdk:"id"`
-	Name                types.String `tfsdk:"name"`
-	Enabled             types.Bool   `tfsdk:"enabled"`
-	Index               types.Int64  `tfsdk:"index"`
-	ActionType          types.String `tfsdk:"action_type"`           // ALLOW | BLOCK
-	AllowReturnTraffic  types.Bool   `tfsdk:"allow_return_traffic"`
-	SourceZoneID        types.String `tfsdk:"source_zone_id"`
-	DestinationZoneID   types.String `tfsdk:"destination_zone_id"`
-	SourceFilter        types.String `tfsdk:"source_filter"`         // JSON blob, optional
-	DestinationFilter   types.String `tfsdk:"destination_filter"`    // JSON blob, optional
-	IPVersion           types.String `tfsdk:"ip_version"`            // IPV4 | IPV6 | IPV4_AND_IPV6
-	Protocol            types.String `tfsdk:"protocol"`              // TCP | UDP | etc., optional
-	LoggingEnabled      types.Bool   `tfsdk:"logging_enabled"`
+	ID                 types.String `tfsdk:"id"`
+	Name               types.String `tfsdk:"name"`
+	Enabled            types.Bool   `tfsdk:"enabled"`
+	Index              types.Int64  `tfsdk:"index"`
+	ActionType         types.String `tfsdk:"action_type"` // ALLOW | BLOCK
+	AllowReturnTraffic types.Bool   `tfsdk:"allow_return_traffic"`
+	SourceZoneID       types.String `tfsdk:"source_zone_id"`
+	DestinationZoneID  types.String `tfsdk:"destination_zone_id"`
+	SourceFilter       types.String `tfsdk:"source_filter"`      // JSON blob, optional
+	DestinationFilter  types.String `tfsdk:"destination_filter"` // JSON blob, optional
+	IPVersion          types.String `tfsdk:"ip_version"`         // IPV4 | IPV6 | IPV4_AND_IPV6
+	Protocol           types.String `tfsdk:"protocol"`           // TCP | UDP | etc., optional
+	LoggingEnabled     types.Bool   `tfsdk:"logging_enabled"`
 }
 
 // firewallPolicyAPI is the raw API payload (used for both send and receive).

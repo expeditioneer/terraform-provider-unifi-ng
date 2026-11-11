@@ -37,38 +37,38 @@ type PresharedKey struct {
 
 type WifiBroadcastModel struct {
 	ID                 types.String   `tfsdk:"id"`
-	Type               types.String   `tfsdk:"type"`            // STANDARD | IOT_OPTIMIZED
+	Type               types.String   `tfsdk:"type"` // STANDARD | IOT_OPTIMIZED
 	Name               types.String   `tfsdk:"name"`
 	Enabled            types.Bool     `tfsdk:"enabled"`
-	NetworkID          types.String   `tfsdk:"network_id"`      // simple single-network SSIDs
-	PresharedKeys      []PresharedKey `tfsdk:"preshared_keys"`  // multi-PSK SSIDs
-	SecurityType       types.String   `tfsdk:"security_type"`   // WPA3_PERSONAL | WPA2_PERSONAL | OPEN
-	Passphrase         types.String   `tfsdk:"passphrase"`      // sensitive; null for multi-PSK
+	NetworkID          types.String   `tfsdk:"network_id"`     // simple single-network SSIDs
+	PresharedKeys      []PresharedKey `tfsdk:"preshared_keys"` // multi-PSK SSIDs
+	SecurityType       types.String   `tfsdk:"security_type"`  // WPA3_PERSONAL | WPA2_PERSONAL | OPEN
+	Passphrase         types.String   `tfsdk:"passphrase"`     // sensitive; null for multi-PSK
 	HideName           types.Bool     `tfsdk:"hide_name"`
 	ClientIsolation    types.Bool     `tfsdk:"client_isolation"`
-	BandSteering       types.Bool     `tfsdk:"band_steering"`   // STANDARD only
-	FastRoaming        types.Bool     `tfsdk:"fast_roaming"`    // STANDARD only
+	BandSteering       types.Bool     `tfsdk:"band_steering"` // STANDARD only
+	FastRoaming        types.Bool     `tfsdk:"fast_roaming"`  // STANDARD only
 	MulticastToUnicast types.Bool     `tfsdk:"multicast_to_unicast"`
 	FrequenciesGHz     types.Set      `tfsdk:"frequencies_ghz"` // STANDARD only
 }
 
 type wifiBroadcastAPI struct {
-	ID      string                 `json:"id,omitempty"`
-	Type    string                 `json:"type,omitempty"`
-	Name    string                 `json:"name"`
-	Enabled *bool                  `json:"enabled,omitempty"`
-	Network map[string]interface{} `json:"network,omitempty"`
-	SecurityConfiguration map[string]interface{} `json:"securityConfiguration,omitempty"`
-	HideName              bool     `json:"hideName"`
-	ClientIsolationEnabled bool    `json:"clientIsolationEnabled"`
-	BandSteeringEnabled    *bool   `json:"bandSteeringEnabled,omitempty"`
-	FastRoamingEnabled     bool    `json:"fastRoamingEnabled,omitempty"` // deprecated top-level
-	MulticastToUnicastConversionEnabled bool `json:"multicastToUnicastConversionEnabled"`
-	BroadcastingFrequenciesGHz []float64 `json:"broadcastingFrequenciesGHz,omitempty"`
-	ArpProxyEnabled      bool `json:"arpProxyEnabled"`
-	UapsdEnabled         bool `json:"uapsdEnabled"`
-	BssTransitionEnabled bool `json:"bssTransitionEnabled"`
-	AdvertiseDeviceName  bool `json:"advertiseDeviceName"`
+	ID                                  string                 `json:"id,omitempty"`
+	Type                                string                 `json:"type,omitempty"`
+	Name                                string                 `json:"name"`
+	Enabled                             *bool                  `json:"enabled,omitempty"`
+	Network                             map[string]interface{} `json:"network,omitempty"`
+	SecurityConfiguration               map[string]interface{} `json:"securityConfiguration,omitempty"`
+	HideName                            bool                   `json:"hideName"`
+	ClientIsolationEnabled              bool                   `json:"clientIsolationEnabled"`
+	BandSteeringEnabled                 *bool                  `json:"bandSteeringEnabled,omitempty"`
+	FastRoamingEnabled                  bool                   `json:"fastRoamingEnabled,omitempty"` // deprecated top-level
+	MulticastToUnicastConversionEnabled bool                   `json:"multicastToUnicastConversionEnabled"`
+	BroadcastingFrequenciesGHz          []float64              `json:"broadcastingFrequenciesGHz,omitempty"`
+	ArpProxyEnabled                     bool                   `json:"arpProxyEnabled"`
+	UapsdEnabled                        bool                   `json:"uapsdEnabled"`
+	BssTransitionEnabled                bool                   `json:"bssTransitionEnabled"`
+	AdvertiseDeviceName                 bool                   `json:"advertiseDeviceName"`
 }
 
 func (r *WifiBroadcastResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -265,8 +265,8 @@ func wifiModelToAPI(ctx context.Context, m WifiBroadcastModel) (*wifiBroadcastAP
 		SecurityConfiguration: map[string]interface{}{
 			"type": m.SecurityType.ValueString(),
 		},
-		HideName:               m.HideName.ValueBool(),
-		ClientIsolationEnabled: m.ClientIsolation.ValueBool(),
+		HideName:                            m.HideName.ValueBool(),
+		ClientIsolationEnabled:              m.ClientIsolation.ValueBool(),
 		MulticastToUnicastConversionEnabled: m.MulticastToUnicast.ValueBool(),
 	}
 
@@ -286,7 +286,7 @@ func wifiModelToAPI(ctx context.Context, m WifiBroadcastModel) (*wifiBroadcastAP
 		p.SecurityConfiguration["pmfMode"] = pmfMode
 		p.SecurityConfiguration["saeConfiguration"] = map[string]interface{}{
 			"anticloggingThresholdSeconds": 5,
-			"syncTimeSeconds":             5,
+			"syncTimeSeconds":              5,
 		}
 		p.SecurityConfiguration["wpa3FastRoamingEnabled"] = false
 	}

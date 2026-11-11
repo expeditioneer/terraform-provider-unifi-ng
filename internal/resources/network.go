@@ -53,9 +53,9 @@ type networkAPIPayload struct {
 }
 
 type networkIPv4Config struct {
-	HostIPAddress     string              `json:"hostIpAddress,omitempty"`
-	PrefixLength      int                 `json:"prefixLength,omitempty"`
-	DHCPConfiguration *networkDHCPConfig  `json:"dhcpConfiguration,omitempty"`
+	HostIPAddress     string             `json:"hostIpAddress,omitempty"`
+	PrefixLength      int                `json:"prefixLength,omitempty"`
+	DHCPConfiguration *networkDHCPConfig `json:"dhcpConfiguration,omitempty"`
 }
 
 type networkDHCPConfig struct {
