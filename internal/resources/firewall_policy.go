@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -111,10 +112,12 @@ func (r *FirewallPolicyResource) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"source_filter": schema.StringAttribute{
 				Optional:            true,
+				PlanModifiers:       []planmodifier.String{equivalentFilter{}},
 				MarkdownDescription: "JSON traffic filter for the source (ports, IPs, TMLs). Omit for zone-wide match.",
 			},
 			"destination_filter": schema.StringAttribute{
 				Optional:            true,
+				PlanModifiers:       []planmodifier.String{equivalentFilter{}},
 				MarkdownDescription: "JSON traffic filter for the destination (ports, IPs, TMLs). Omit for zone-wide match.",
 			},
 			"ip_version": schema.StringAttribute{
@@ -344,15 +347,11 @@ func policyAPIToModel(p *firewallPolicyAPI, m *FirewallPolicyModel) error {
 		if zid, ok := p.Source["zoneId"].(string); ok {
 			m.SourceZoneID = types.StringValue(zid)
 		}
-		if tf, ok := p.Source["trafficFilter"]; ok && tf != nil {
-			b, err := json.Marshal(tf)
-			if err != nil {
-				return fmt.Errorf("marshalling source trafficFilter: %w", err)
-			}
-			m.SourceFilter = types.StringValue(string(b))
-		} else {
-			m.SourceFilter = types.StringNull()
+		f, err := filterValue(m.SourceFilter, p.Source["trafficFilter"])
+		if err != nil {
+			return fmt.Errorf("marshalling source trafficFilter: %w", err)
 		}
+		m.SourceFilter = f
 	}
 
 	// Destination zone + filter
@@ -360,15 +359,11 @@ func policyAPIToModel(p *firewallPolicyAPI, m *FirewallPolicyModel) error {
 		if zid, ok := p.Destination["zoneId"].(string); ok {
 			m.DestinationZoneID = types.StringValue(zid)
 		}
-		if tf, ok := p.Destination["trafficFilter"]; ok && tf != nil {
-			b, err := json.Marshal(tf)
-			if err != nil {
-				return fmt.Errorf("marshalling destination trafficFilter: %w", err)
-			}
-			m.DestinationFilter = types.StringValue(string(b))
-		} else {
-			m.DestinationFilter = types.StringNull()
+		f, err := filterValue(m.DestinationFilter, p.Destination["trafficFilter"])
+		if err != nil {
+			return fmt.Errorf("marshalling destination trafficFilter: %w", err)
 		}
+		m.DestinationFilter = f
 	}
 
 	// IP protocol scope
@@ -392,4 +387,71 @@ func policyAPIToModel(p *firewallPolicyAPI, m *FirewallPolicyModel) error {
 	}
 
 	return nil
+}
+
+// filterValue keeps the prior JSON when the API returns an equivalent filter, because it may reorder list items.
+func filterValue(prior types.String, filter any) (types.String, error) {
+	if filter == nil {
+		return types.StringNull(), nil
+	}
+	b, err := json.Marshal(filter)
+	if err != nil {
+		return types.StringNull(), err
+	}
+	if known(prior) && equivalentJSON(prior.ValueString(), string(b)) {
+		return prior, nil
+	}
+	return types.StringValue(string(b)), nil
+}
+
+// equivalentJSON compares two JSON documents, treating every array as an unordered list.
+func equivalentJSON(a, b string) bool {
+	var va, vb any
+	if json.Unmarshal([]byte(a), &va) != nil || json.Unmarshal([]byte(b), &vb) != nil {
+		return false
+	}
+	ca, _ := json.Marshal(canonicalJSON(va))
+	cb, _ := json.Marshal(canonicalJSON(vb))
+	return string(ca) == string(cb)
+}
+
+func canonicalJSON(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		for k, e := range t {
+			t[k] = canonicalJSON(e)
+		}
+		return t
+	case []any:
+		keys := make([]string, len(t))
+		for i, e := range t {
+			t[i] = canonicalJSON(e)
+			raw, _ := json.Marshal(t[i])
+			keys[i] = string(raw)
+		}
+		sort.Strings(keys)
+		out := make([]any, len(keys))
+		for i, k := range keys {
+			_ = json.Unmarshal([]byte(k), &out[i])
+		}
+		return out
+	}
+	return v
+}
+
+// equivalentFilter keeps the state value when the configured filter only differs in list order.
+type equivalentFilter struct{}
+
+func (equivalentFilter) Description(context.Context) string {
+	return "Ignores list order in traffic filter JSON."
+}
+
+func (m equivalentFilter) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (equivalentFilter) PlanModifyString(_ context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	if known(req.StateValue) && known(req.PlanValue) && equivalentJSON(req.StateValue.ValueString(), req.PlanValue.ValueString()) {
+		resp.PlanValue = req.StateValue
+	}
 }

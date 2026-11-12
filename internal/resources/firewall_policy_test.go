@@ -96,3 +96,24 @@ func TestPolicyBlockDropsAllowReturnTraffic(t *testing.T) {
 		t.Error("allowReturnTraffic must be removed for BLOCK")
 	}
 }
+
+func TestEquivalentJSONIgnoresListOrder(t *testing.T) {
+	a := `{"type":"PORT","portFilter":{"items":[{"type":"PORT_NUMBER","value":53},{"type":"PORT_NUMBER","value":853}]}}`
+	b := `{"portFilter":{"items":[{"value":853,"type":"PORT_NUMBER"},{"type":"PORT_NUMBER","value":53}]},"type":"PORT"}`
+	if !equivalentJSON(a, b) {
+		t.Error("reordered items must be equivalent")
+	}
+	if equivalentJSON(a, `{"type":"PORT","portFilter":{"items":[{"type":"PORT_NUMBER","value":53}]}}`) {
+		t.Error("different items must not be equivalent")
+	}
+}
+
+func TestFilterValueKeepsEquivalentPrior(t *testing.T) {
+	prior := types.StringValue(`{"items":[1,2]}`)
+	if got, _ := filterValue(prior, map[string]any{"items": []any{2.0, 1.0}}); got != prior {
+		t.Errorf("got %v, want prior", got)
+	}
+	if got, _ := filterValue(prior, map[string]any{"items": []any{3.0}}); got.ValueString() != `{"items":[3]}` {
+		t.Errorf("got %v", got)
+	}
+}
