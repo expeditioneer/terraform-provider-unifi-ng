@@ -42,6 +42,7 @@ type FirewallPolicyModel struct {
 	IPVersion          types.String `tfsdk:"ip_version"`         // IPV4 | IPV6 | IPV4_AND_IPV6
 	Protocol           types.String `tfsdk:"protocol"`           // TCP | UDP | etc., optional
 	LoggingEnabled     types.Bool   `tfsdk:"logging_enabled"`
+	ReportFlowEnabled  types.Bool   `tfsdk:"report_flow_enabled"`
 }
 
 // firewallPolicyAPI is the raw API payload (used for both send and receive).
@@ -55,6 +56,8 @@ type firewallPolicyAPI struct {
 	Destination     map[string]interface{} `json:"destination,omitempty"`
 	IPProtocolScope map[string]interface{} `json:"ipProtocolScope,omitempty"`
 	LoggingEnabled  bool                   `json:"loggingEnabled"`
+	// Omitted on update, the API resets it to true.
+	ReportFlowEnabled *bool `json:"reportFlowEnabled,omitempty"`
 }
 
 func (r *FirewallPolicyResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -126,6 +129,7 @@ func (r *FirewallPolicyResource) Schema(_ context.Context, _ resource.SchemaRequ
 				Default:             booldefault.StaticBool(false),
 				MarkdownDescription: "Log matched traffic.",
 			},
+			"report_flow_enabled": optionalComputedBool("Report matched flows in the traffic and flow view."),
 		},
 	}
 }
@@ -254,6 +258,11 @@ func policyModelToAPI(m FirewallPolicyModel) (*firewallPolicyAPI, error) {
 		p.Action["allowReturnTraffic"] = m.AllowReturnTraffic.ValueBool()
 	}
 
+	if known(m.ReportFlowEnabled) {
+		rf := m.ReportFlowEnabled.ValueBool()
+		p.ReportFlowEnabled = &rf
+	}
+
 	if !m.Index.IsNull() && !m.Index.IsUnknown() {
 		idx := m.Index.ValueInt64()
 		p.Index = &idx
@@ -312,6 +321,10 @@ func policyAPIToModel(p *firewallPolicyAPI, m *FirewallPolicyModel) error {
 	}
 	if p.Index != nil {
 		m.Index = types.Int64Value(*p.Index)
+	}
+	m.ReportFlowEnabled = types.BoolNull()
+	if p.ReportFlowEnabled != nil {
+		m.ReportFlowEnabled = types.BoolValue(*p.ReportFlowEnabled)
 	}
 
 	// Action
