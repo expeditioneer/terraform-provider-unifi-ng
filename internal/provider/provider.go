@@ -26,6 +26,7 @@ type UnifiProviderModel struct {
 	ApiUrl        types.String `tfsdk:"api_url"`
 	SiteId        types.String `tfsdk:"site_id"`
 	AllowInsecure types.Bool   `tfsdk:"allow_insecure"`
+	CertSHA256    types.String `tfsdk:"tls_certificate_sha256"`
 }
 
 // UnifiClient holds shared config passed to resources and data sources.
@@ -66,7 +67,11 @@ func (p *UnifiProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp
 			},
 			"allow_insecure": schema.BoolAttribute{
 				Optional:            true,
-				MarkdownDescription: "Skip TLS certificate verification (for self-signed certs). Defaults to false.",
+				MarkdownDescription: "Skip TLS certificate verification (for self-signed certs). Defaults to false. Prefer `tls_certificate_sha256`.",
+			},
+			"tls_certificate_sha256": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Pin the controller certificate by its SHA-256 fingerprint (hex, colons optional), e.g. from `openssl x509 -noout -fingerprint -sha256`. Replaces chain and hostname verification, so it works with the self-signed certificate. Conflicts with `allow_insecure`.",
 			},
 		},
 	}
@@ -79,12 +84,17 @@ func (p *UnifiProvider) Configure(ctx context.Context, req provider.ConfigureReq
 		return
 	}
 
-	c := client.New(
+	c, err := client.New(
 		data.ApiKey.ValueString(),
 		data.ApiUrl.ValueString(),
 		data.SiteId.ValueString(),
 		data.AllowInsecure.ValueBool(),
+		data.CertSHA256.ValueString(),
 	)
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid provider configuration", err.Error())
+		return
+	}
 
 	resp.DataSourceData = c
 	resp.ResourceData = c

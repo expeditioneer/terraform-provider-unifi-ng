@@ -5,7 +5,9 @@ package client
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,10 +23,24 @@ type Client struct {
 	httpClient *http.Client
 }
 
-// New creates a new UniFi API client.
-func New(apiKey, apiURL, siteID string, allowInsecure bool) *Client {
+// New creates a new UniFi API client. A non-empty certSHA256 pins the controller certificate
+// instead of verifying its chain and hostname.
+func New(apiKey, apiURL, siteID string, allowInsecure bool, certSHA256 string) (*Client, error) {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	if allowInsecure {
+	switch {
+	case certSHA256 != "" && allowInsecure:
+		return nil, fmt.Errorf("allow_insecure and tls_certificate_sha256 are mutually exclusive")
+	case certSHA256 != "":
+		pin, err := parseFingerprint(certSHA256)
+		if err != nil {
+			return nil, err
+		}
+		transport.TLSClientConfig = &tls.Config{
+			// Self-signed controller certificates do not name the controller host; the pin replaces both checks.
+			InsecureSkipVerify: true, //nolint:gosec
+			VerifyConnection:   verifyPin(pin),
+		}
+	case allowInsecure:
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec
 	}
 	return &Client{
@@ -34,6 +50,29 @@ func New(apiKey, apiURL, siteID string, allowInsecure bool) *Client {
 		httpClient: &http.Client{
 			Transport: transport,
 		},
+	}, nil
+}
+
+// parseFingerprint accepts hex with or without colons, as printed by openssl x509 -fingerprint -sha256.
+func parseFingerprint(s string) ([]byte, error) {
+	pin, err := hex.DecodeString(strings.ReplaceAll(s, ":", ""))
+	if err != nil || len(pin) != sha256.Size {
+		return nil, fmt.Errorf("tls_certificate_sha256 must be a SHA-256 fingerprint in hex")
+	}
+	return pin, nil
+}
+
+// verifyPin uses VerifyConnection, which unlike VerifyPeerCertificate also runs on resumed sessions.
+func verifyPin(pin []byte) func(tls.ConnectionState) error {
+	return func(cs tls.ConnectionState) error {
+		if len(cs.PeerCertificates) == 0 {
+			return fmt.Errorf("controller presented no certificate")
+		}
+		got := sha256.Sum256(cs.PeerCertificates[0].Raw)
+		if !bytes.Equal(got[:], pin) {
+			return fmt.Errorf("controller certificate SHA-256 %X does not match tls_certificate_sha256", got)
+		}
+		return nil
 	}
 }
 
