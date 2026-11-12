@@ -253,12 +253,16 @@ func (r *NetworkResource) ImportState(ctx context.Context, req resource.ImportSt
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-// networkUpdatePayload returns a deep copy of a GET response without read-only fields.
 func networkUpdatePayload(current map[string]any) map[string]any {
+	return updatePayload(current, networkReadOnlyKeys)
+}
+
+// updatePayload returns a deep copy of a GET response without read-only fields.
+func updatePayload(current map[string]any, readOnlyKeys []string) map[string]any {
 	raw, _ := json.Marshal(current)
 	var payload map[string]any
 	_ = json.Unmarshal(raw, &payload)
-	for _, key := range networkReadOnlyKeys {
+	for _, key := range readOnlyKeys {
 		delete(payload, key)
 	}
 	return payload

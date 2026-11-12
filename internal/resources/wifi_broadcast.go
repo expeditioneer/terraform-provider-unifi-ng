@@ -3,13 +3,13 @@ package resources
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -36,40 +36,30 @@ type PresharedKey struct {
 }
 
 type WifiBroadcastModel struct {
-	ID                 types.String   `tfsdk:"id"`
-	Type               types.String   `tfsdk:"type"` // STANDARD | IOT_OPTIMIZED
-	Name               types.String   `tfsdk:"name"`
-	Enabled            types.Bool     `tfsdk:"enabled"`
-	NetworkID          types.String   `tfsdk:"network_id"`     // simple single-network SSIDs
-	PresharedKeys      []PresharedKey `tfsdk:"preshared_keys"` // multi-PSK SSIDs
-	SecurityType       types.String   `tfsdk:"security_type"`  // WPA3_PERSONAL | WPA2_PERSONAL | OPEN
-	Passphrase         types.String   `tfsdk:"passphrase"`     // sensitive; null for multi-PSK
-	HideName           types.Bool     `tfsdk:"hide_name"`
-	ClientIsolation    types.Bool     `tfsdk:"client_isolation"`
-	BandSteering       types.Bool     `tfsdk:"band_steering"` // STANDARD only
-	FastRoaming        types.Bool     `tfsdk:"fast_roaming"`  // STANDARD only
-	MulticastToUnicast types.Bool     `tfsdk:"multicast_to_unicast"`
-	FrequenciesGHz     types.Set      `tfsdk:"frequencies_ghz"` // STANDARD only
+	ID                  types.String   `tfsdk:"id"`
+	Type                types.String   `tfsdk:"type"` // STANDARD | IOT_OPTIMIZED
+	Name                types.String   `tfsdk:"name"`
+	Enabled             types.Bool     `tfsdk:"enabled"`
+	NetworkID           types.String   `tfsdk:"network_id"`     // simple single-network SSIDs
+	PresharedKeys       []PresharedKey `tfsdk:"preshared_keys"` // multi-PSK SSIDs
+	SecurityType        types.String   `tfsdk:"security_type"`  // WPA3_PERSONAL | WPA2_PERSONAL | OPEN
+	Passphrase          types.String   `tfsdk:"passphrase"`     // sensitive; null for multi-PSK
+	HideName            types.Bool     `tfsdk:"hide_name"`
+	ClientIsolation     types.Bool     `tfsdk:"client_isolation"`
+	BandSteering        types.Bool     `tfsdk:"band_steering"` // STANDARD only
+	FastRoaming         types.Bool     `tfsdk:"fast_roaming"`  // STANDARD only
+	MulticastToUnicast  types.Bool     `tfsdk:"multicast_to_unicast"`
+	FrequenciesGHz      types.Set      `tfsdk:"frequencies_ghz"` // STANDARD only
+	AdvertiseDeviceName types.Bool     `tfsdk:"advertise_device_name"`
+	ArpProxy            types.Bool     `tfsdk:"arp_proxy"`
+	BssTransition       types.Bool     `tfsdk:"bss_transition"`
+	PmfMode             types.String   `tfsdk:"pmf_mode"`
+	Uapsd               types.Bool     `tfsdk:"uapsd"`
+	Wpa3FastRoaming     types.Bool     `tfsdk:"wpa3_fast_roaming"`
 }
 
-type wifiBroadcastAPI struct {
-	ID                                  string                 `json:"id,omitempty"`
-	Type                                string                 `json:"type,omitempty"`
-	Name                                string                 `json:"name"`
-	Enabled                             *bool                  `json:"enabled,omitempty"`
-	Network                             map[string]interface{} `json:"network,omitempty"`
-	SecurityConfiguration               map[string]interface{} `json:"securityConfiguration,omitempty"`
-	HideName                            bool                   `json:"hideName"`
-	ClientIsolationEnabled              bool                   `json:"clientIsolationEnabled"`
-	BandSteeringEnabled                 *bool                  `json:"bandSteeringEnabled,omitempty"`
-	FastRoamingEnabled                  bool                   `json:"fastRoamingEnabled,omitempty"` // deprecated top-level
-	MulticastToUnicastConversionEnabled bool                   `json:"multicastToUnicastConversionEnabled"`
-	BroadcastingFrequenciesGHz          []float64              `json:"broadcastingFrequenciesGHz,omitempty"`
-	ArpProxyEnabled                     bool                   `json:"arpProxyEnabled"`
-	UapsdEnabled                        bool                   `json:"uapsdEnabled"`
-	BssTransitionEnabled                bool                   `json:"bssTransitionEnabled"`
-	AdvertiseDeviceName                 bool                   `json:"advertiseDeviceName"`
-}
+// Fields returned by GET that the create/update request does not accept.
+var wifiReadOnlyKeys = []string{"id", "metadata"}
 
 func (r *WifiBroadcastResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_wifi_broadcast"
@@ -77,7 +67,7 @@ func (r *WifiBroadcastResource) Metadata(_ context.Context, req resource.Metadat
 
 func (r *WifiBroadcastResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Manages a UniFi WiFi broadcast (SSID).",
+		MarkdownDescription: "Manages a UniFi WiFi broadcast (SSID). Updates only change the attributes managed here; all other settings of the SSID are preserved.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -132,18 +122,8 @@ func (r *WifiBroadcastResource) Schema(_ context.Context, _ resource.SchemaReque
 				Optional: true, Computed: true, Default: booldefault.StaticBool(false),
 				MarkdownDescription: "Isolate clients from each other.",
 			},
-			"band_steering": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				PlanModifiers:       []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()},
-				MarkdownDescription: "Steer capable clients to 5/6 GHz. Only applies to `STANDARD` type.",
-			},
-			"fast_roaming": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				PlanModifiers:       []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()},
-				MarkdownDescription: "Enable 802.11r fast BSS transition. Only applies to `STANDARD` type.",
-			},
+			"band_steering": optionalComputedBool("Steer capable clients to 5/6 GHz. Only applies to `STANDARD` type."),
+			"fast_roaming":  optionalComputedBool("Enable 802.11r fast BSS transition. Only applies to `STANDARD` type."),
 			"multicast_to_unicast": schema.BoolAttribute{
 				Optional: true, Computed: true, Default: booldefault.StaticBool(false),
 				MarkdownDescription: "Convert multicast traffic to unicast.",
@@ -155,6 +135,12 @@ func (r *WifiBroadcastResource) Schema(_ context.Context, _ resource.SchemaReque
 				PlanModifiers:       []planmodifier.Set{setplanmodifier.UseStateForUnknown()},
 				MarkdownDescription: "Broadcasting frequencies: `2.4`, `5`, `6`.",
 			},
+			"advertise_device_name": optionalComputedBool("Advertise the access point name in beacons."),
+			"arp_proxy":             optionalComputedBool("Answer ARP requests on behalf of clients."),
+			"bss_transition":        optionalComputedBool("Enable 802.11v BSS transition management."),
+			"pmf_mode":              optionalComputedString("Protected management frames: `OPTIONAL` or `REQUIRED`. Only applies to WPA3 security types; defaults to `OPTIONAL` for `WPA2_WPA3_PERSONAL` and `REQUIRED` for `WPA3_PERSONAL`."),
+			"uapsd":                 optionalComputedBool("Enable unscheduled automatic power save delivery."),
+			"wpa3_fast_roaming":     optionalComputedBool("Enable fast roaming for WPA3. Only applies to WPA3 security types."),
 		},
 	}
 }
@@ -171,23 +157,39 @@ func (r *WifiBroadcastResource) Configure(_ context.Context, req resource.Config
 	r.client = c
 }
 
+func (r *WifiBroadcastResource) wifiPath(id string) string {
+	return fmt.Sprintf("/v1/sites/%s/wifi/broadcasts/%s", r.client.SiteID(), id)
+}
+
+// newWifiPayload holds the fields the API requires on create that are not managed as attributes.
+func newWifiPayload() map[string]any {
+	return map[string]any{
+		"advertiseDeviceName":   false,
+		"arpProxyEnabled":       false,
+		"bssTransitionEnabled":  false,
+		"channel2gLockedTo6":    false,
+		"dtimPeriod2gLockedTo3": false,
+		"uapsdEnabled":          false,
+	}
+}
+
 func (r *WifiBroadcastResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan WifiBroadcastModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	payload, d := wifiModelToAPI(ctx, plan)
-	resp.Diagnostics.Append(d...)
+	payload := newWifiPayload()
+	resp.Diagnostics.Append(applyWifiModel(ctx, plan, payload)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	var result wifiBroadcastAPI
+	var result map[string]any
 	if err := r.client.Post(ctx, fmt.Sprintf("/v1/sites/%s/wifi/broadcasts", r.client.SiteID()), payload, &result); err != nil {
 		resp.Diagnostics.AddError("Error creating wifi broadcast", err.Error())
 		return
 	}
-	resp.Diagnostics.Append(wifiAPIToModel(ctx, &result, &plan)...)
+	resp.Diagnostics.Append(wifiToModel(ctx, result, &plan)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -197,19 +199,18 @@ func (r *WifiBroadcastResource) Read(ctx context.Context, req resource.ReadReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	var result wifiBroadcastAPI
-	if err := r.client.Get(ctx, fmt.Sprintf("/v1/sites/%s/wifi/broadcasts/%s", r.client.SiteID(), state.ID.ValueString()), &result); err != nil {
+	var result map[string]any
+	if err := r.client.Get(ctx, r.wifiPath(state.ID.ValueString()), &result); err != nil {
 		resp.Diagnostics.AddError("Error reading wifi broadcast", err.Error())
 		return
 	}
-	// If the API didn't return a passphrase, preserve the one from state
-	// (some API versions redact it; others return it)
-	if result.SecurityConfiguration != nil {
-		if _, hasPass := result.SecurityConfiguration["passphrase"]; !hasPass {
-			result.SecurityConfiguration["passphrase"] = state.Passphrase.ValueString()
+	// Some API versions redact the passphrase.
+	if sec, ok := result["securityConfiguration"].(map[string]any); ok {
+		if _, hasPass := sec["passphrase"]; !hasPass {
+			sec["passphrase"] = state.Passphrase.ValueString()
 		}
 	}
-	resp.Diagnostics.Append(wifiAPIToModel(ctx, &result, &state)...)
+	resp.Diagnostics.Append(wifiToModel(ctx, result, &state)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -219,17 +220,25 @@ func (r *WifiBroadcastResource) Update(ctx context.Context, req resource.UpdateR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	payload, d := wifiModelToAPI(ctx, plan)
-	resp.Diagnostics.Append(d...)
+
+	// PUT replaces the whole SSID, so start from the current object to keep unmanaged settings.
+	var current map[string]any
+	if err := r.client.Get(ctx, r.wifiPath(plan.ID.ValueString()), &current); err != nil {
+		resp.Diagnostics.AddError("Error reading wifi broadcast before update", err.Error())
+		return
+	}
+	payload := updatePayload(current, wifiReadOnlyKeys)
+	resp.Diagnostics.Append(applyWifiModel(ctx, plan, payload)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	var result wifiBroadcastAPI
-	if err := r.client.Put(ctx, fmt.Sprintf("/v1/sites/%s/wifi/broadcasts/%s", r.client.SiteID(), plan.ID.ValueString()), payload, &result); err != nil {
+
+	var result map[string]any
+	if err := r.client.Put(ctx, r.wifiPath(plan.ID.ValueString()), payload, &result); err != nil {
 		resp.Diagnostics.AddError("Error updating wifi broadcast", err.Error())
 		return
 	}
-	resp.Diagnostics.Append(wifiAPIToModel(ctx, &result, &plan)...)
+	resp.Diagnostics.Append(wifiToModel(ctx, result, &plan)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -239,7 +248,7 @@ func (r *WifiBroadcastResource) Delete(ctx context.Context, req resource.DeleteR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if err := r.client.Delete(ctx, fmt.Sprintf("/v1/sites/%s/wifi/broadcasts/%s", r.client.SiteID(), state.ID.ValueString())); err != nil {
+	if err := r.client.Delete(ctx, r.wifiPath(state.ID.ValueString())); err != nil {
 		resp.Diagnostics.AddError("Error deleting wifi broadcast", err.Error())
 	}
 }
@@ -248,156 +257,215 @@ func (r *WifiBroadcastResource) ImportState(ctx context.Context, req resource.Im
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func wifiModelToAPI(ctx context.Context, m WifiBroadcastModel) (*wifiBroadcastAPI, diag.Diagnostics) {
-	enabled := m.Enabled.ValueBool()
-	broadcastType := "STANDARD"
-	if !m.Type.IsNull() && !m.Type.IsUnknown() && m.Type.ValueString() != "" {
-		broadcastType = m.Type.ValueString()
+func setBool(p map[string]any, key string, v types.Bool) {
+	if known(v) {
+		p[key] = v.ValueBool()
 	}
-	p := &wifiBroadcastAPI{
-		Type:    broadcastType,
-		Name:    m.Name.ValueString(),
-		Enabled: &enabled,
-		Network: map[string]interface{}{
-			"type":      "SPECIFIC",
-			"networkId": m.NetworkID.ValueString(),
-		},
-		SecurityConfiguration: map[string]interface{}{
-			"type": m.SecurityType.ValueString(),
-		},
-		HideName:                            m.HideName.ValueBool(),
-		ClientIsolationEnabled:              m.ClientIsolation.ValueBool(),
-		MulticastToUnicastConversionEnabled: m.MulticastToUnicast.ValueBool(),
+}
+
+// applyWifiModel writes every known attribute of the model into the API payload.
+func applyWifiModel(ctx context.Context, m WifiBroadcastModel, p map[string]any) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	p["name"] = m.Name.ValueString()
+	if known(m.Type) && m.Type.ValueString() != "" {
+		p["type"] = m.Type.ValueString()
+	} else if _, ok := p["type"]; !ok {
+		p["type"] = "STANDARD"
+	}
+	setBool(p, "enabled", m.Enabled)
+	setBool(p, "hideName", m.HideName)
+	setBool(p, "clientIsolationEnabled", m.ClientIsolation)
+	setBool(p, "multicastToUnicastConversionEnabled", m.MulticastToUnicast)
+	setBool(p, "advertiseDeviceName", m.AdvertiseDeviceName)
+	setBool(p, "arpProxyEnabled", m.ArpProxy)
+	setBool(p, "bssTransitionEnabled", m.BssTransition)
+	setBool(p, "uapsdEnabled", m.Uapsd)
+
+	// The API rejects false with a single band, where it omits the field.
+	if known(m.BandSteering) {
+		if _, present := p["bandSteeringEnabled"]; present || m.BandSteering.ValueBool() {
+			p["bandSteeringEnabled"] = m.BandSteering.ValueBool()
+		}
 	}
 
-	// Band steering — only include when true (API rejects false with single band)
-	if !m.BandSteering.IsNull() && !m.BandSteering.IsUnknown() && m.BandSteering.ValueBool() {
-		bs := true
-		p.BandSteeringEnabled = &bs
+	if known(m.FrequenciesGHz) {
+		var freqStrs []string
+		diags.Append(m.FrequenciesGHz.ElementsAs(ctx, &freqStrs, false)...)
+		freqs := []float64{}
+		for _, s := range freqStrs {
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				diags.AddError("Invalid frequencies_ghz", err.Error())
+				return diags
+			}
+			freqs = append(freqs, f)
+		}
+		if len(freqs) > 0 && !sameFrequencies(p["broadcastingFrequenciesGHz"], freqs) {
+			p["broadcastingFrequenciesGHz"] = freqs
+		}
 	}
 
-	// WPA3-specific security configuration defaults
 	secType := m.SecurityType.ValueString()
-	if secType == "WPA2_WPA3_PERSONAL" || secType == "WPA3_PERSONAL" {
-		pmfMode := "OPTIONAL"
-		if secType == "WPA3_PERSONAL" {
-			pmfMode = "REQUIRED"
-		}
-		p.SecurityConfiguration["pmfMode"] = pmfMode
-		p.SecurityConfiguration["saeConfiguration"] = map[string]interface{}{
-			"anticloggingThresholdSeconds": 5,
-			"syncTimeSeconds":              5,
-		}
-		p.SecurityConfiguration["wpa3FastRoamingEnabled"] = false
+	sec, _ := p["securityConfiguration"].(map[string]any)
+	if sec == nil || sec["type"] != secType {
+		sec = map[string]any{"type": secType}
+		p["securityConfiguration"] = sec
 	}
+	if secType == "WPA2_WPA3_PERSONAL" || secType == "WPA3_PERSONAL" {
+		if _, ok := sec["pmfMode"]; !ok {
+			sec["pmfMode"] = "OPTIONAL"
+			if secType == "WPA3_PERSONAL" {
+				sec["pmfMode"] = "REQUIRED"
+			}
+		}
+		if _, ok := sec["saeConfiguration"]; !ok {
+			sec["saeConfiguration"] = map[string]any{
+				"anticloggingThresholdSeconds": 5,
+				"syncTimeSeconds":              5,
+			}
+		}
+		if _, ok := sec["wpa3FastRoamingEnabled"]; !ok {
+			sec["wpa3FastRoamingEnabled"] = false
+		}
+		if known(m.PmfMode) {
+			sec["pmfMode"] = m.PmfMode.ValueString()
+		}
+		setBool(sec, "wpa3FastRoamingEnabled", m.Wpa3FastRoaming)
+	}
+	setBool(sec, "fastRoamingEnabled", m.FastRoaming)
 
 	if len(m.PresharedKeys) > 0 {
-		// Multi-PSK: one passphrase per network
-		var keys []map[string]interface{}
+		keys := []map[string]any{}
 		for _, k := range m.PresharedKeys {
-			keys = append(keys, map[string]interface{}{
-				"network":    map[string]interface{}{"type": "SPECIFIC", "networkId": k.NetworkID.ValueString()},
+			keys = append(keys, map[string]any{
+				"network":    map[string]any{"type": "SPECIFIC", "networkId": k.NetworkID.ValueString()},
 				"passphrase": k.Passphrase.ValueString(),
 			})
 		}
-		p.SecurityConfiguration["presharedKeys"] = keys
-		p.Network = nil // no top-level network for multi-PSK
-	} else if !m.Passphrase.IsNull() && !m.Passphrase.IsUnknown() && m.Passphrase.ValueString() != "" {
-		p.SecurityConfiguration["passphrase"] = m.Passphrase.ValueString()
-	}
-	if !m.FastRoaming.IsNull() && !m.FastRoaming.IsUnknown() {
-		p.SecurityConfiguration["fastRoamingEnabled"] = m.FastRoaming.ValueBool()
-	}
-
-	// Frequencies
-	if !m.FrequenciesGHz.IsNull() && !m.FrequenciesGHz.IsUnknown() {
-		var freqStrs []string
-		m.FrequenciesGHz.ElementsAs(ctx, &freqStrs, false)
-		var freqs []float64
-		for _, s := range freqStrs {
-			var f float64
-			fmt.Sscanf(s, "%f", &f)
-			freqs = append(freqs, f)
+		sec["presharedKeys"] = keys
+		delete(sec, "passphrase")
+		delete(p, "network")
+	} else {
+		delete(sec, "presharedKeys")
+		if known(m.Passphrase) && m.Passphrase.ValueString() != "" {
+			sec["passphrase"] = m.Passphrase.ValueString()
 		}
-		p.BroadcastingFrequenciesGHz = freqs
+		if known(m.NetworkID) {
+			p["network"] = map[string]any{"type": "SPECIFIC", "networkId": m.NetworkID.ValueString()}
+		}
 	}
 
-	return p, nil
+	return diags
 }
 
-func wifiAPIToModel(ctx context.Context, p *wifiBroadcastAPI, m *WifiBroadcastModel) diag.Diagnostics {
-	var diags diag.Diagnostics
-	m.ID = types.StringValue(p.ID)
-	m.Type = types.StringValue(p.Type)
-	m.Name = types.StringValue(p.Name)
-	if p.Enabled != nil {
-		m.Enabled = types.BoolValue(*p.Enabled)
+// sameFrequencies ignores order, so an unchanged set keeps the API's ordering.
+func sameFrequencies(current any, freqs []float64) bool {
+	list, ok := current.([]any)
+	if !ok || len(list) != len(freqs) {
+		return false
 	}
-	m.HideName = types.BoolValue(p.HideName)
-	m.ClientIsolation = types.BoolValue(p.ClientIsolationEnabled)
-	m.MulticastToUnicast = types.BoolValue(p.MulticastToUnicastConversionEnabled)
-
-	// STANDARD-only fields — null for IOT_OPTIMIZED
-	if p.Type == "IOT_OPTIMIZED" {
-		m.BandSteering = types.BoolNull()
-		m.FastRoaming = types.BoolNull()
-		setVal, _ := types.SetValueFrom(ctx, types.StringType, []string{})
-		m.FrequenciesGHz = setVal
-	} else {
-		if p.BandSteeringEnabled != nil {
-			m.BandSteering = types.BoolValue(*p.BandSteeringEnabled)
+	seen := map[float64]bool{}
+	for _, f := range list {
+		n, ok := f.(float64)
+		if !ok {
+			return false
+		}
+		seen[n] = true
+	}
+	for _, f := range freqs {
+		if !seen[f] {
+			return false
 		}
 	}
+	return true
+}
 
-	if p.Network != nil {
-		if nid, ok := p.Network["networkId"].(string); ok {
-			m.NetworkID = types.StringValue(nid)
+func boolOrFalse(p map[string]any, keys ...string) types.Bool {
+	if v := boolAt(p, keys...); !v.IsNull() {
+		return v
+	}
+	return types.BoolValue(false)
+}
+
+// wifiToModel maps an API WiFi broadcast object into the Terraform model.
+func wifiToModel(ctx context.Context, p map[string]any, m *WifiBroadcastModel) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	m.ID = stringAt(p, "id")
+	m.Type = stringAt(p, "type")
+	m.Name = stringAt(p, "name")
+	if v := boolAt(p, "enabled"); !v.IsNull() {
+		m.Enabled = v
+	}
+	m.HideName = boolOrFalse(p, "hideName")
+	m.ClientIsolation = boolOrFalse(p, "clientIsolationEnabled")
+	m.MulticastToUnicast = boolOrFalse(p, "multicastToUnicastConversionEnabled")
+	m.AdvertiseDeviceName = boolAt(p, "advertiseDeviceName")
+	m.ArpProxy = boolAt(p, "arpProxyEnabled")
+	m.BssTransition = boolAt(p, "bssTransitionEnabled")
+	m.Uapsd = boolAt(p, "uapsdEnabled")
+
+	if m.Type.ValueString() == "IOT_OPTIMIZED" {
+		m.BandSteering = types.BoolNull()
+		m.FastRoaming = types.BoolNull()
+	} else if v := boolAt(p, "bandSteeringEnabled"); !v.IsNull() {
+		m.BandSteering = v
+	}
+	if m.BandSteering.IsUnknown() {
+		m.BandSteering = types.BoolNull()
+	}
+
+	if _, ok := p["network"].(map[string]any); ok {
+		if nid := stringAt(p, "network", "networkId"); !nid.IsNull() {
+			m.NetworkID = nid
 		}
 	} else {
 		m.NetworkID = types.StringNull()
 	}
 
-	if p.SecurityConfiguration != nil {
-		if t, ok := p.SecurityConfiguration["type"].(string); ok {
-			m.SecurityType = types.StringValue(t)
+	if sec, ok := p["securityConfiguration"].(map[string]any); ok {
+		if t := stringAt(sec, "type"); !t.IsNull() {
+			m.SecurityType = t
 		}
-		if fr, ok := p.SecurityConfiguration["fastRoamingEnabled"].(bool); ok {
-			m.FastRoaming = types.BoolValue(fr)
+		if fr := boolAt(sec, "fastRoamingEnabled"); !fr.IsNull() {
+			m.FastRoaming = fr
 		}
+		if m.FastRoaming.IsUnknown() {
+			m.FastRoaming = types.BoolNull()
+		}
+		m.PmfMode = stringAt(sec, "pmfMode")
+		m.Wpa3FastRoaming = boolAt(sec, "wpa3FastRoamingEnabled")
 
-		// Multi-PSK: presharedKeys array
-		if keys, ok := p.SecurityConfiguration["presharedKeys"].([]interface{}); ok && len(keys) > 0 {
+		if keys, ok := sec["presharedKeys"].([]any); ok && len(keys) > 0 {
 			m.PresharedKeys = nil
 			m.Passphrase = types.StringNull()
 			for _, k := range keys {
-				km, ok := k.(map[string]interface{})
+				km, ok := k.(map[string]any)
 				if !ok {
 					continue
 				}
-				net, _ := km["network"].(map[string]interface{})
-				nid, _ := net["networkId"].(string)
-				pass, _ := km["passphrase"].(string)
 				m.PresharedKeys = append(m.PresharedKeys, PresharedKey{
-					NetworkID:  types.StringValue(nid),
-					Passphrase: types.StringValue(pass),
+					NetworkID:  types.StringValue(stringAt(km, "network", "networkId").ValueString()),
+					Passphrase: types.StringValue(stringAt(km, "passphrase").ValueString()),
 				})
 			}
 		} else {
-			// Single PSK — nil (not empty slice) so Terraform treats as null
+			// nil, not an empty slice, so Terraform treats it as null
 			m.PresharedKeys = nil
-			if pass, ok := p.SecurityConfiguration["passphrase"].(string); ok && pass != "" {
-				m.Passphrase = types.StringValue(pass)
+			if pass := stringAt(sec, "passphrase"); pass.ValueString() != "" {
+				m.Passphrase = pass
 			}
 		}
 	}
 
-	// Frequencies — store as strings since 2.4 can't be a TF number attribute name
-	var freqStrs []string
-	for _, f := range p.BroadcastingFrequenciesGHz {
-		if f == 2.4 {
-			freqStrs = append(freqStrs, "2.4")
-		} else {
-			freqStrs = append(freqStrs, fmt.Sprintf("%.0f", f))
+	// Strings, because 2.4 cannot be a Terraform number attribute name.
+	freqStrs := []string{}
+	if list, ok := p["broadcastingFrequenciesGHz"].([]any); ok {
+		for _, f := range list {
+			if n, ok := f.(float64); ok {
+				freqStrs = append(freqStrs, strconv.FormatFloat(n, 'f', -1, 64))
+			}
 		}
 	}
 	setVal, d := types.SetValueFrom(ctx, types.StringType, freqStrs)
