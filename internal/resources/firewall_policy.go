@@ -112,12 +112,10 @@ func (r *FirewallPolicyResource) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"source_filter": schema.StringAttribute{
 				Optional:            true,
-				PlanModifiers:       []planmodifier.String{equivalentFilter{}},
 				MarkdownDescription: "JSON traffic filter for the source (ports, IPs, TMLs). Omit for zone-wide match.",
 			},
 			"destination_filter": schema.StringAttribute{
 				Optional:            true,
-				PlanModifiers:       []planmodifier.String{equivalentFilter{}},
 				MarkdownDescription: "JSON traffic filter for the destination (ports, IPs, TMLs). Omit for zone-wide match.",
 			},
 			"ip_version": schema.StringAttribute{
@@ -437,21 +435,4 @@ func canonicalJSON(v any) any {
 		return out
 	}
 	return v
-}
-
-// equivalentFilter keeps the state value when the configured filter only differs in list order.
-type equivalentFilter struct{}
-
-func (equivalentFilter) Description(context.Context) string {
-	return "Ignores list order in traffic filter JSON."
-}
-
-func (m equivalentFilter) MarkdownDescription(ctx context.Context) string {
-	return m.Description(ctx)
-}
-
-func (equivalentFilter) PlanModifyString(_ context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
-	if known(req.StateValue) && known(req.PlanValue) && equivalentJSON(req.StateValue.ValueString(), req.PlanValue.ValueString()) {
-		resp.PlanValue = req.StateValue
-	}
 }
