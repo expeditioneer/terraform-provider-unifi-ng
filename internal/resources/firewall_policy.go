@@ -45,7 +45,10 @@ type FirewallPolicyModel struct {
 	ReportFlowEnabled  types.Bool   `tfsdk:"report_flow_enabled"`
 }
 
-// firewallPolicyAPI is the raw API payload (used for both send and receive).
+// Fields returned by GET that the create/update request does not accept.
+var policyReadOnlyKeys = []string{"id", "index", "metadata"}
+
+// firewallPolicyAPI is the API response.
 type firewallPolicyAPI struct {
 	ID              string                 `json:"id,omitempty"`
 	Name            string                 `json:"name"`
@@ -146,6 +149,10 @@ func (r *FirewallPolicyResource) Configure(_ context.Context, req resource.Confi
 	r.client = c
 }
 
+func (r *FirewallPolicyResource) policyPath(id string) string {
+	return fmt.Sprintf("/v1/sites/%s/firewall/policies/%s", r.client.SiteID(), id)
+}
+
 func (r *FirewallPolicyResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan FirewallPolicyModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -153,8 +160,8 @@ func (r *FirewallPolicyResource) Create(ctx context.Context, req resource.Create
 		return
 	}
 
-	payload, err := policyModelToAPI(plan)
-	if err != nil {
+	payload := map[string]any{}
+	if err := applyPolicyModel(plan, payload); err != nil {
 		resp.Diagnostics.AddError("Error building firewall policy payload", err.Error())
 		return
 	}
@@ -182,9 +189,7 @@ func (r *FirewallPolicyResource) Read(ctx context.Context, req resource.ReadRequ
 	}
 
 	var result firewallPolicyAPI
-	if err := r.client.Get(ctx,
-		fmt.Sprintf("/v1/sites/%s/firewall/policies/%s", r.client.SiteID(), state.ID.ValueString()),
-		&result); err != nil {
+	if err := r.client.Get(ctx, r.policyPath(state.ID.ValueString()), &result); err != nil {
 		resp.Diagnostics.AddError("Error reading firewall policy", err.Error())
 		return
 	}
@@ -203,16 +208,20 @@ func (r *FirewallPolicyResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	payload, err := policyModelToAPI(plan)
-	if err != nil {
+	// PUT replaces the whole policy, so start from the current object to keep unmanaged settings.
+	var current map[string]any
+	if err := r.client.Get(ctx, r.policyPath(plan.ID.ValueString()), &current); err != nil {
+		resp.Diagnostics.AddError("Error reading firewall policy before update", err.Error())
+		return
+	}
+	payload := updatePayload(current, policyReadOnlyKeys)
+	if err := applyPolicyModel(plan, payload); err != nil {
 		resp.Diagnostics.AddError("Error building firewall policy payload", err.Error())
 		return
 	}
 
 	var result firewallPolicyAPI
-	if err := r.client.Put(ctx,
-		fmt.Sprintf("/v1/sites/%s/firewall/policies/%s", r.client.SiteID(), plan.ID.ValueString()),
-		payload, &result); err != nil {
+	if err := r.client.Put(ctx, r.policyPath(plan.ID.ValueString()), payload, &result); err != nil {
 		resp.Diagnostics.AddError("Error updating firewall policy", err.Error())
 		return
 	}
@@ -231,8 +240,7 @@ func (r *FirewallPolicyResource) Delete(ctx context.Context, req resource.Delete
 		return
 	}
 
-	if err := r.client.Delete(ctx,
-		fmt.Sprintf("/v1/sites/%s/firewall/policies/%s", r.client.SiteID(), state.ID.ValueString())); err != nil {
+	if err := r.client.Delete(ctx, r.policyPath(state.ID.ValueString())); err != nil {
 		resp.Diagnostics.AddError("Error deleting firewall policy", err.Error())
 	}
 }
@@ -241,71 +249,63 @@ func (r *FirewallPolicyResource) ImportState(ctx context.Context, req resource.I
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-// policyModelToAPI converts the Terraform model to the API payload.
-func policyModelToAPI(m FirewallPolicyModel) (*firewallPolicyAPI, error) {
-	enabled := m.Enabled.ValueBool()
-	p := &firewallPolicyAPI{
-		Name:           m.Name.ValueString(),
-		Enabled:        &enabled,
-		LoggingEnabled: m.LoggingEnabled.ValueBool(),
-		Action: map[string]interface{}{
-			"type": m.ActionType.ValueString(),
-		},
+// applyPolicyModel writes every known attribute of the model into the API payload.
+func applyPolicyModel(m FirewallPolicyModel, p map[string]any) error {
+	p["name"] = m.Name.ValueString()
+	setBool(p, "enabled", m.Enabled)
+	setBool(p, "loggingEnabled", m.LoggingEnabled)
+	setBool(p, "reportFlowEnabled", m.ReportFlowEnabled)
+	// Not part of the update schema, but sent only when set explicitly as before.
+	if known(m.Index) {
+		p["index"] = m.Index.ValueInt64()
 	}
 
-	// Only include allowReturnTraffic for ALLOW actions (API rejects it for BLOCK)
+	action := child(p, "action")
+	action["type"] = m.ActionType.ValueString()
+	// The API rejects allowReturnTraffic for BLOCK.
 	if m.ActionType.ValueString() == "ALLOW" {
-		p.Action["allowReturnTraffic"] = m.AllowReturnTraffic.ValueBool()
+		setBool(action, "allowReturnTraffic", m.AllowReturnTraffic)
+	} else {
+		delete(action, "allowReturnTraffic")
 	}
 
-	if known(m.ReportFlowEnabled) {
-		rf := m.ReportFlowEnabled.ValueBool()
-		p.ReportFlowEnabled = &rf
+	if err := applyPolicyEndpoint(child(p, "source"), m.SourceZoneID, m.SourceFilter, "source_filter"); err != nil {
+		return err
+	}
+	if err := applyPolicyEndpoint(child(p, "destination"), m.DestinationZoneID, m.DestinationFilter, "destination_filter"); err != nil {
+		return err
 	}
 
-	if !m.Index.IsNull() && !m.Index.IsUnknown() {
-		idx := m.Index.ValueInt64()
-		p.Index = &idx
-	}
-
-	// Source
-	source := map[string]interface{}{"zoneId": m.SourceZoneID.ValueString()}
-	if !m.SourceFilter.IsNull() && !m.SourceFilter.IsUnknown() && m.SourceFilter.ValueString() != "" {
-		var filter map[string]interface{}
-		if err := json.Unmarshal([]byte(m.SourceFilter.ValueString()), &filter); err != nil {
-			return nil, fmt.Errorf("invalid source_filter JSON: %w", err)
-		}
-		source["trafficFilter"] = filter
-	}
-	p.Source = source
-
-	// Destination
-	dest := map[string]interface{}{"zoneId": m.DestinationZoneID.ValueString()}
-	if !m.DestinationFilter.IsNull() && !m.DestinationFilter.IsUnknown() && m.DestinationFilter.ValueString() != "" {
-		var filter map[string]interface{}
-		if err := json.Unmarshal([]byte(m.DestinationFilter.ValueString()), &filter); err != nil {
-			return nil, fmt.Errorf("invalid destination_filter JSON: %w", err)
-		}
-		dest["trafficFilter"] = filter
-	}
-	p.Destination = dest
-
-	// IP protocol scope
-	if !m.IPVersion.IsNull() && !m.IPVersion.IsUnknown() && m.IPVersion.ValueString() != "" {
-		scope := map[string]interface{}{"ipVersion": m.IPVersion.ValueString()}
-		if !m.Protocol.IsNull() && !m.Protocol.IsUnknown() && m.Protocol.ValueString() != "" {
-			scope["protocolFilter"] = map[string]interface{}{
-				"type": "NAMED_PROTOCOL",
-				"protocol": map[string]interface{}{
-					"name": m.Protocol.ValueString(),
-				},
+	if known(m.IPVersion) && m.IPVersion.ValueString() != "" {
+		scope := child(p, "ipProtocolScope")
+		scope["ipVersion"] = m.IPVersion.ValueString()
+		if known(m.Protocol) && m.Protocol.ValueString() != "" {
+			scope["protocolFilter"] = map[string]any{
+				"type":          "NAMED_PROTOCOL",
+				"protocol":      map[string]any{"name": m.Protocol.ValueString()},
 				"matchOpposite": false,
 			}
+		} else if stringAt(scope, "protocolFilter", "type").ValueString() == "NAMED_PROTOCOL" {
+			delete(scope, "protocolFilter")
 		}
-		p.IPProtocolScope = scope
 	}
 
-	return p, nil
+	return nil
+}
+
+// applyPolicyEndpoint sets the zone and replaces the traffic filter; a null filter matches the whole zone.
+func applyPolicyEndpoint(e map[string]any, zoneID, filter types.String, attr string) error {
+	e["zoneId"] = zoneID.ValueString()
+	if !known(filter) || filter.ValueString() == "" {
+		delete(e, "trafficFilter")
+		return nil
+	}
+	var f map[string]any
+	if err := json.Unmarshal([]byte(filter.ValueString()), &f); err != nil {
+		return fmt.Errorf("invalid %s JSON: %w", attr, err)
+	}
+	e["trafficFilter"] = f
+	return nil
 }
 
 // policyAPIToModel maps the API response back to the Terraform model.
