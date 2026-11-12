@@ -112,7 +112,8 @@ func (p *UnifiProvider) Resources(_ context.Context) []func() resource.Resource 
 
 func (p *UnifiProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
-		datasources.NewSitesDataSource,
 		datasources.NewDevicesDataSource,
+		datasources.NewFirewallZoneDataSource,
+		datasources.NewSitesDataSource,
 	}
 }
