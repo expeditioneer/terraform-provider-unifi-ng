@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 // Client is a UniFi Integration API client.
@@ -21,6 +22,9 @@ type Client struct {
 	baseURL    string
 	siteID     string
 	httpClient *http.Client
+
+	legacyMu   sync.Mutex
+	legacySite string
 }
 
 // New creates a new UniFi API client. A non-empty certSHA256 pins the controller certificate
@@ -79,9 +83,13 @@ func verifyPin(pin []byte) func(tls.ConnectionState) error {
 // SiteID returns the configured site ID.
 func (c *Client) SiteID() string { return c.siteID }
 
-// do executes an HTTP request against the UniFi API.
+// do executes an HTTP request against the UniFi Integration API.
 func (c *Client) do(ctx context.Context, method, path string, body any) ([]byte, int, error) {
-	url := fmt.Sprintf("%s/proxy/network/integration%s", c.baseURL, path)
+	return c.request(ctx, method, "/proxy/network/integration"+path, body)
+}
+
+func (c *Client) request(ctx context.Context, method, path string, body any) ([]byte, int, error) {
+	url := c.baseURL + path
 
 	var bodyReader io.Reader
 	if body != nil {

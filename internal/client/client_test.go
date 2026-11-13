@@ -55,3 +55,13 @@ func TestInvalidPin(t *testing.T) {
 		t.Error("expected an error")
 	}
 }
+
+func TestDecodeLegacy(t *testing.T) {
+	var out []map[string]any
+	if err := decodeLegacy([]byte(`{"meta":{"rc":"ok"},"data":[{"name":"ap"}]}`), &out); err != nil || len(out) != 1 {
+		t.Errorf("got %v, %v", out, err)
+	}
+	if err := decodeLegacy([]byte(`{"meta":{"rc":"error","msg":"api.err.NotFound"},"data":[]}`), &out); err == nil {
+		t.Error("expected an error for rc=error")
+	}
+}
