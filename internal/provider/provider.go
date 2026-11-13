@@ -118,6 +118,7 @@ func (p *UnifiProvider) DataSources(_ context.Context) []func() datasource.DataS
 	return []func() datasource.DataSource{
 		datasources.NewDevicesDataSource,
 		datasources.NewFirewallZoneDataSource,
+		datasources.NewLegacyNetworkDataSource,
 		datasources.NewSitesDataSource,
 	}
 }
