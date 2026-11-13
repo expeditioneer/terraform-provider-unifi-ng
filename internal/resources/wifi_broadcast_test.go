@@ -115,3 +115,50 @@ func TestWifiCreateIncludesRequiredFields(t *testing.T) {
 		}
 	}
 }
+
+func TestWifiBroadcastFilter(t *testing.T) {
+	ctx := context.Background()
+	ids := func(v ...string) types.Set {
+		s, _ := types.SetValueFrom(ctx, types.StringType, append([]string{}, v...))
+		return s
+	}
+	const ap = "00000000-0000-0000-0000-000000000031"
+	devices := map[string]any{"type": "DEVICES", "deviceIds": []any{ap}}
+	tags := map[string]any{"type": "DEVICE_TAGS", "deviceTagIds": []any{"00000000-0000-0000-0000-000000000032"}}
+
+	tests := []struct {
+		name      string
+		current   any
+		deviceIDs types.Set
+		tagIDs    types.Set
+		want      any
+		wantError bool
+	}{
+		{"set devices", nil, ids(ap), ids(), map[string]any{"type": "DEVICES", "deviceIds": []string{ap}}, false},
+		{"clear devices", devices, ids(), ids(), nil, false},
+		{"unknown keeps current", tags, types.SetUnknown(types.StringType), types.SetUnknown(types.StringType), tags, false},
+		{"empty devices keeps tags", tags, ids(), types.SetUnknown(types.StringType), tags, false},
+		{"both set", nil, ids(ap), ids("00000000-0000-0000-0000-000000000032"), nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := map[string]any{"broadcastingDeviceFilter": tt.current}
+			diags := applyBroadcastFilter(ctx, WifiBroadcastModel{BroadcastDeviceIDs: tt.deviceIDs, BroadcastTagIDs: tt.tagIDs}, p)
+			if diags.HasError() != tt.wantError {
+				t.Fatalf("error = %v, want %v", diags, tt.wantError)
+			}
+			if !tt.wantError && !reflect.DeepEqual(p["broadcastingDeviceFilter"], tt.want) {
+				t.Errorf("got %v, want %v", p["broadcastingDeviceFilter"], tt.want)
+			}
+		})
+	}
+}
+
+func TestWifiBroadcastFilterRead(t *testing.T) {
+	wifi := decode(t, wifiFixture)
+	wifi["broadcastingDeviceFilter"] = map[string]any{"type": "DEVICES", "deviceIds": []any{"a", "b"}}
+	m := readWifiModel(t, wifi)
+	if len(m.BroadcastDeviceIDs.Elements()) != 2 || len(m.BroadcastTagIDs.Elements()) != 0 {
+		t.Errorf("got devices %v, tags %v", m.BroadcastDeviceIDs, m.BroadcastTagIDs)
+	}
+}
