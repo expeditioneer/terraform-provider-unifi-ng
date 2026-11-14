@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -13,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/beezly/terraform-provider-unifi/internal/client"
@@ -42,8 +44,8 @@ type WifiBroadcastModel struct {
 	Enabled             types.Bool     `tfsdk:"enabled"`
 	NetworkID           types.String   `tfsdk:"network_id"`     // simple single-network SSIDs
 	PresharedKeys       []PresharedKey `tfsdk:"preshared_keys"` // multi-PSK SSIDs
-	SecurityType        types.String   `tfsdk:"security_type"`  // WPA3_PERSONAL | WPA2_PERSONAL | OPEN
-	Passphrase          types.String   `tfsdk:"passphrase"`     // sensitive; null for multi-PSK
+	SecurityType        types.String   `tfsdk:"security_type"`
+	Passphrase          types.String   `tfsdk:"passphrase"` // sensitive; null for multi-PSK
 	HideName            types.Bool     `tfsdk:"hide_name"`
 	ClientIsolation     types.Bool     `tfsdk:"client_isolation"`
 	BandSteering        types.Bool     `tfsdk:"band_steering"` // STANDARD only
@@ -79,6 +81,7 @@ func (r *WifiBroadcastResource) Schema(_ context.Context, _ resource.SchemaReque
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "Broadcast type: `STANDARD` (default) or `IOT_OPTIMIZED` (2.4 GHz only, no band steering).",
+				Validators:          []validator.String{stringvalidator.OneOf("IOT_OPTIMIZED", "STANDARD")},
 				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"name": schema.StringAttribute{
@@ -109,7 +112,8 @@ func (r *WifiBroadcastResource) Schema(_ context.Context, _ resource.SchemaReque
 			},
 			"security_type": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Security type: `WPA3_PERSONAL`, `WPA2_PERSONAL`, `WPA2_WPA3_PERSONAL`, or `OPEN`.",
+				MarkdownDescription: "Security type: `WPA3_PERSONAL`, `WPA2_PERSONAL`, `WPA2_WPA3_PERSONAL`, or `OPEN`. Enterprise types need a RADIUS configuration, which is not supported.",
+				Validators:          []validator.String{stringvalidator.OneOf("OPEN", "WPA2_PERSONAL", "WPA2_WPA3_PERSONAL", "WPA3_PERSONAL")},
 			},
 			"passphrase": schema.StringAttribute{
 				Optional:            true,

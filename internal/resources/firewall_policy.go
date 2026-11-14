@@ -36,7 +36,7 @@ type FirewallPolicyModel struct {
 	Name               types.String `tfsdk:"name"`
 	Enabled            types.Bool   `tfsdk:"enabled"`
 	Index              types.Int64  `tfsdk:"index"`
-	ActionType         types.String `tfsdk:"action_type"` // ALLOW | BLOCK
+	ActionType         types.String `tfsdk:"action_type"`
 	AllowReturnTraffic types.Bool   `tfsdk:"allow_return_traffic"`
 	SourceZoneID       types.String `tfsdk:"source_zone_id"`
 	DestinationZoneID  types.String `tfsdk:"destination_zone_id"`
@@ -96,7 +96,8 @@ func (r *FirewallPolicyResource) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"action_type": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Action to take: `ALLOW` or `BLOCK`.",
+				MarkdownDescription: "Action to take: `ALLOW`, `BLOCK` or `REJECT`.",
+				Validators:          []validator.String{stringvalidator.OneOf("ALLOW", "BLOCK", "REJECT")},
 			},
 			"allow_return_traffic": schema.BoolAttribute{
 				Optional:            true,
