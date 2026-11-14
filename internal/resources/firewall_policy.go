@@ -88,9 +88,9 @@ func (r *FirewallPolicyResource) Schema(_ context.Context, _ resource.SchemaRequ
 				MarkdownDescription: "Whether the policy is active.",
 			},
 			"index": schema.Int64Attribute{
-				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "Ordering index. Lower = higher priority.",
+				MarkdownDescription: "Ordering index. Lower = higher priority. Read-only: the API orders policies per zone pair through a separate endpoint.",
+				PlanModifiers:       []planmodifier.Int64{indexInZonePair{}},
 			},
 			"action_type": schema.StringAttribute{
 				Required:            true,
@@ -254,16 +254,39 @@ func (r *FirewallPolicyResource) ImportState(ctx context.Context, req resource.I
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
+// indexInZonePair keeps the prior index while the zone pair stays the same: the controller
+// numbers policies per zone pair and keeps the index on update.
+type indexInZonePair struct{}
+
+func (indexInZonePair) Description(context.Context) string {
+	return "Keeps the prior index unless source or destination zone changes."
+}
+
+func (m indexInZonePair) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (indexInZonePair) PlanModifyInt64(ctx context.Context, req planmodifier.Int64Request, resp *planmodifier.Int64Response) {
+	if req.StateValue.IsNull() || !req.PlanValue.IsUnknown() {
+		return
+	}
+	for _, attr := range []string{"destination_zone_id", "source_zone_id"} {
+		var planned, prior types.String
+		resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root(attr), &planned)...)
+		resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root(attr), &prior)...)
+		if !planned.Equal(prior) {
+			return
+		}
+	}
+	resp.PlanValue = req.StateValue
+}
+
 // applyPolicyModel writes every known attribute of the model into the API payload.
 func applyPolicyModel(m FirewallPolicyModel, p map[string]any) error {
 	p["name"] = m.Name.ValueString()
 	setBool(p, "enabled", m.Enabled)
 	setBool(p, "loggingEnabled", m.LoggingEnabled)
 	setBool(p, "reportFlowEnabled", m.ReportFlowEnabled)
-	// Not part of the update schema, but sent only when set explicitly as before.
-	if known(m.Index) {
-		p["index"] = m.Index.ValueInt64()
-	}
 
 	action := child(p, "action")
 	action["type"] = m.ActionType.ValueString()
@@ -324,6 +347,7 @@ func policyAPIToModel(p *firewallPolicyAPI, m *FirewallPolicyModel) error {
 	} else {
 		m.Enabled = types.BoolValue(true)
 	}
+	m.Index = types.Int64Null()
 	if p.Index != nil {
 		m.Index = types.Int64Value(*p.Index)
 	}

@@ -45,8 +45,6 @@ func readPolicyModel(t *testing.T, policy map[string]any) FirewallPolicyModel {
 	if err := policyAPIToModel(&api, &m); err != nil {
 		t.Fatal(err)
 	}
-	// Computed without a plan modifier, so unknown during updates.
-	m.Index = types.Int64Unknown()
 	return m
 }
 
