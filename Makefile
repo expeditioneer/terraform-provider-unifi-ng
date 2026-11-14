@@ -13,7 +13,7 @@ build:
 clean:
 	rm --force $(BINARY_NAME)
 
-## fetch: Download the latest UniFi OpenAPI spec as API reference
+## fetch: Download the newest official UniFi OpenAPI spec as API reference
 fetch:
 	@scripts/fetch-spec
 

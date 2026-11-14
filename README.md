@@ -65,7 +65,7 @@ go test ./...
 
 ## Updating for new UniFi API versions
 
-Resources are written by hand. `make fetch` downloads the latest OpenAPI spec from <https://beez.ly/unifi-apis/> into `specs/` as reference; diff it against the previous version to find API changes.
+Resources are written by hand. `make fetch` downloads the newest OpenAPI spec from <https://beez.ly/unifi-apis/> that is an official release (per the [release feed](https://community.ui.com/rss/releases/UniFi-Network-Controller/e6712595-81bb-4829-8e42-9e2630fabcfe); beez.ly also lists early access builds) into `specs/` as reference; diff it against the previous version to find API changes.
 
 ## Status
 

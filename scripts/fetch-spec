@@ -1,23 +1,40 @@
 #!/usr/bin/env bash
-# Fetch the latest UniFi Network OpenAPI spec from beez.ly/unifi-apis/
+# Fetch the newest UniFi Network OpenAPI spec from beez.ly/unifi-apis/ that is an official release
 # Writes to specs/network-<version>.json and specs/latest-version.txt
 set -o errexit -o nounset -o pipefail
 
 SPEC_BASE_URL="https://beez.ly/unifi-apis"
 INDEX_URL="$SPEC_BASE_URL/"
+# beez.ly also lists early access builds; only versions in this feed are official releases.
+RELEASES_URL="https://community.ui.com/rss/releases/UniFi-Network-Controller/e6712595-81bb-4829-8e42-9e2630fabcfe"
 SPECS_DIR="$(dirname "$0")/../specs"
 mkdir --parents "$SPECS_DIR"
 
-echo "Checking latest UniFi API spec version..."
+echo "Checking official UniFi Network releases..."
 
-LATEST=$(curl --silent "$INDEX_URL" | grep --only-matching --perl-regexp 'network-\K[0-9]+\.[0-9]+\.[0-9]+(?=\.json)' | sort --version-sort | tail --lines=1)
-
-if [[ -z "$LATEST" ]]; then
-    echo "ERROR: Could not determine latest spec version from $INDEX_URL" >&2
+OFFICIAL=$(curl --silent --fail "$RELEASES_URL" | grep --only-matching --perl-regexp '<title><!\[CDATA\[UniFi Network Application \K[0-9]+\.[0-9]+\.[0-9]+(?=\]\]>)' | sort --version-sort --unique)
+if [[ -z "$OFFICIAL" ]]; then
+    echo "ERROR: Could not determine official releases from $RELEASES_URL" >&2
     exit 1
 fi
 
-echo "Latest version: $LATEST"
+AVAILABLE=$(curl --silent --fail "$INDEX_URL" | grep --only-matching --perl-regexp 'network-\K[0-9]+\.[0-9]+\.[0-9]+(?=\.json)' | sort --version-sort --unique)
+if [[ -z "$AVAILABLE" ]]; then
+    echo "ERROR: Could not determine spec versions from $INDEX_URL" >&2
+    exit 1
+fi
+
+LATEST=$(grep --fixed-strings --line-regexp --file=<(echo "$OFFICIAL") <<<"$AVAILABLE" | tail --lines=1 || true)
+if [[ -z "$LATEST" ]]; then
+    echo "ERROR: No spec on $INDEX_URL matches an official release" >&2
+    exit 1
+fi
+
+echo "Latest official version with spec: $LATEST"
+NEWEST_OFFICIAL=$(tail --lines=1 <<<"$OFFICIAL")
+if [[ "$NEWEST_OFFICIAL" != "$LATEST" ]]; then
+    echo "Note: newest official release $NEWEST_OFFICIAL has no spec yet"
+fi
 
 CURRENT=""
 if [[ -f "$SPECS_DIR/latest-version.txt" ]]; then
