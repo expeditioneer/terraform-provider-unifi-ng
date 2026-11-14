@@ -1,0 +1,33 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "dependencyDashboard": false,
+  "extends": ["config:recommended"],
+  "forkProcessing": "enabled",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["* 4-7 * * 1"]
+  },
+  "nix": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "automerge": true,
+      "matchUpdateTypes": ["digest", "lockFileMaintenance", "minor", "patch", "pinDigest"]
+    },
+    {
+      "automerge": false,
+      "labels": ["needs-review"],
+      "matchUpdateTypes": ["major"]
+    },
+    {
+      "description": "Hold releases back so a compromised or withdrawn one is likely noticed first; git-refs (nix) has no release timestamp",
+      "matchDatasources": ["github-releases", "github-tags", "go"],
+      "minimumReleaseAge": "3 days"
+    }
+  ],
+  "platformAutomerge": false,
+  "postUpdateOptions": ["gomodTidy"],
+  "schedule": ["* 4-7 * * *"],
+  "timezone": "Europe/Berlin"
+}
