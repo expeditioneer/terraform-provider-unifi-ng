@@ -22,11 +22,13 @@ func NewDevicesDataSource() datasource.DataSource {
 }
 
 type DeviceItem struct {
-	ID      types.String `tfsdk:"id"`
-	Name    types.String `tfsdk:"name"`
-	Model   types.String `tfsdk:"model"`
-	MAC     types.String `tfsdk:"mac"`
-	Adopted types.Bool   `tfsdk:"adopted"`
+	FirmwareVersion types.String `tfsdk:"firmware_version"`
+	ID              types.String `tfsdk:"id"`
+	IPAddress       types.String `tfsdk:"ip_address"`
+	MAC             types.String `tfsdk:"mac"`
+	Model           types.String `tfsdk:"model"`
+	Name            types.String `tfsdk:"name"`
+	State           types.String `tfsdk:"state"`
 }
 
 type DevicesModel struct {
@@ -34,11 +36,13 @@ type DevicesModel struct {
 }
 
 type deviceAPIItem struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Model   string `json:"model"`
-	MAC     string `json:"mac"`
-	Adopted bool   `json:"adopted"`
+	FirmwareVersion string `json:"firmwareVersion"`
+	ID              string `json:"id"`
+	IPAddress       string `json:"ipAddress"`
+	MAC             string `json:"macAddress"`
+	Model           string `json:"model"`
+	Name            string `json:"name"`
+	State           string `json:"state"`
 }
 
 func (d *DevicesDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -47,17 +51,19 @@ func (d *DevicesDataSource) Metadata(_ context.Context, req datasource.MetadataR
 
 func (d *DevicesDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "List all adopted and pending UniFi devices.",
+		MarkdownDescription: "Lists the adopted UniFi devices of the site.",
 		Attributes: map[string]schema.Attribute{
 			"data": schema.ListNestedAttribute{
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
-						"id":      schema.StringAttribute{Computed: true},
-						"name":    schema.StringAttribute{Computed: true},
-						"model":   schema.StringAttribute{Computed: true},
-						"mac":     schema.StringAttribute{Computed: true},
-						"adopted": schema.BoolAttribute{Computed: true},
+						"firmware_version": schema.StringAttribute{Computed: true},
+						"id":               schema.StringAttribute{Computed: true},
+						"ip_address":       schema.StringAttribute{Computed: true},
+						"mac":              schema.StringAttribute{Computed: true},
+						"model":            schema.StringAttribute{Computed: true},
+						"name":             schema.StringAttribute{Computed: true},
+						"state":            schema.StringAttribute{Computed: true, MarkdownDescription: "E.g. `ONLINE`, `OFFLINE`, `UPDATING`."},
 					},
 				},
 			},
@@ -87,11 +93,13 @@ func (d *DevicesDataSource) Read(ctx context.Context, _ datasource.ReadRequest, 
 	var state DevicesModel
 	for _, dev := range devices {
 		state.Data = append(state.Data, DeviceItem{
-			ID:      types.StringValue(dev.ID),
-			Name:    types.StringValue(dev.Name),
-			Model:   types.StringValue(dev.Model),
-			MAC:     types.StringValue(dev.MAC),
-			Adopted: types.BoolValue(dev.Adopted),
+			FirmwareVersion: types.StringValue(dev.FirmwareVersion),
+			ID:              types.StringValue(dev.ID),
+			IPAddress:       types.StringValue(dev.IPAddress),
+			MAC:             types.StringValue(dev.MAC),
+			Model:           types.StringValue(dev.Model),
+			Name:            types.StringValue(dev.Name),
+			State:           types.StringValue(dev.State),
 		})
 	}
 
