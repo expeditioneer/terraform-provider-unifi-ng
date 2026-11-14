@@ -41,10 +41,6 @@ type deviceAPIItem struct {
 	Adopted bool   `json:"adopted"`
 }
 
-type devicesAPIResponse struct {
-	Data []deviceAPIItem `json:"data"`
-}
-
 func (d *DevicesDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_devices"
 }
@@ -82,15 +78,14 @@ func (d *DevicesDataSource) Configure(_ context.Context, req datasource.Configur
 }
 
 func (d *DevicesDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
-	var result devicesAPIResponse
-	path := fmt.Sprintf("/v1/sites/%s/devices", d.client.SiteID())
-	if err := d.client.Get(ctx, path, &result); err != nil {
+	devices, err := client.GetAll[deviceAPIItem](ctx, d.client, fmt.Sprintf("/v1/sites/%s/devices", d.client.SiteID()))
+	if err != nil {
 		resp.Diagnostics.AddError("Error reading devices", err.Error())
 		return
 	}
 
 	var state DevicesModel
-	for _, dev := range result.Data {
+	for _, dev := range devices {
 		state.Data = append(state.Data, DeviceItem{
 			ID:      types.StringValue(dev.ID),
 			Name:    types.StringValue(dev.Name),

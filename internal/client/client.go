@@ -179,6 +179,31 @@ func (c *Client) Get(ctx context.Context, path string, out any) error {
 	return json.Unmarshal(body, out)
 }
 
+// pageLimit is the maximum page size the Integration API accepts.
+const pageLimit = 200
+
+// GetAll reads every page of a list endpoint; without paging the API returns only the first 25 items.
+func GetAll[T any](ctx context.Context, c *Client, path string) ([]T, error) {
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
+	}
+	var all []T
+	for {
+		var page struct {
+			Data       []T   `json:"data"`
+			TotalCount int64 `json:"totalCount"`
+		}
+		if err := c.Get(ctx, fmt.Sprintf("%s%soffset=%d&limit=%d", path, sep, len(all), pageLimit), &page); err != nil {
+			return nil, err
+		}
+		all = append(all, page.Data...)
+		if len(page.Data) == 0 || int64(len(all)) >= page.TotalCount {
+			return all, nil
+		}
+	}
+}
+
 // Post performs a POST request and unmarshals the response into out.
 func (c *Client) Post(ctx context.Context, path string, in, out any) error {
 	body, _, err := c.do(ctx, http.MethodPost, path, in)

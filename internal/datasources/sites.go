@@ -37,10 +37,6 @@ type siteAPIItem struct {
 	InternalReference string `json:"internalReference"`
 }
 
-type sitesAPIResponse struct {
-	Data []siteAPIItem `json:"data"`
-}
-
 func (d *SitesDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_sites"
 }
@@ -76,14 +72,14 @@ func (d *SitesDataSource) Configure(_ context.Context, req datasource.ConfigureR
 }
 
 func (d *SitesDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
-	var result sitesAPIResponse
-	if err := d.client.Get(ctx, "/v1/sites", &result); err != nil {
+	sites, err := client.GetAll[siteAPIItem](ctx, d.client, "/v1/sites")
+	if err != nil {
 		resp.Diagnostics.AddError("Error reading sites", err.Error())
 		return
 	}
 
 	var state SitesModel
-	for _, s := range result.Data {
+	for _, s := range sites {
 		state.Data = append(state.Data, SiteItem{
 			ID:                types.StringValue(s.ID),
 			Name:              types.StringValue(s.Name),

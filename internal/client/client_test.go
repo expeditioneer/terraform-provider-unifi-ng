@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -95,5 +97,31 @@ func TestIsNotFound(t *testing.T) {
 				t.Errorf("IsNotFound(%v) = %v, want %v", err, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestGetAllFollowsPages(t *testing.T) {
+	items := []string{"a", "b", "c", "d", "e"}
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+		if r.URL.Query().Get("limit") != strconv.Itoa(pageLimit) || r.URL.Query().Get("filter") != "x" {
+			t.Errorf("unexpected query %s", r.URL.RawQuery)
+		}
+		// The server caps pages below the requested limit.
+		page := items[offset:min(offset+2, len(items))]
+		json.NewEncoder(w).Encode(map[string]any{"data": page, "totalCount": len(items)})
+	}))
+	defer srv.Close()
+
+	c, err := New("key", srv.URL, "site", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := GetAll[string](context.Background(), c, "/v1/list?filter=x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got, "") != "abcde" {
+		t.Errorf("got %v", got)
 	}
 }

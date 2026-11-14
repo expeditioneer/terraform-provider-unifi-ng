@@ -37,10 +37,6 @@ type firewallZoneAPIItem struct {
 	} `json:"metadata"`
 }
 
-type firewallZonesAPIResponse struct {
-	Data []firewallZoneAPIItem `json:"data"`
-}
-
 func (d *FirewallZoneDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_firewall_zone"
 }
@@ -89,13 +85,13 @@ func (d *FirewallZoneDataSource) Read(ctx context.Context, req datasource.ReadRe
 		return
 	}
 
-	var result firewallZonesAPIResponse
-	if err := d.client.Get(ctx, fmt.Sprintf("/v1/sites/%s/firewall/zones?limit=200", d.client.SiteID()), &result); err != nil {
+	zones, err := client.GetAll[firewallZoneAPIItem](ctx, d.client, fmt.Sprintf("/v1/sites/%s/firewall/zones", d.client.SiteID()))
+	if err != nil {
 		resp.Diagnostics.AddError("Error reading firewall zones", err.Error())
 		return
 	}
 
-	zone, err := findZone(result.Data, state.Name.ValueString())
+	zone, err := findZone(zones, state.Name.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Error looking up firewall zone", err.Error())
 		return

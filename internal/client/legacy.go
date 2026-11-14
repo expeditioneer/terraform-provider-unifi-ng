@@ -61,16 +61,14 @@ func (c *Client) legacySiteName(ctx context.Context) (string, error) {
 	if c.legacySite != "" {
 		return c.legacySite, nil
 	}
-	var sites struct {
-		Data []struct {
-			ID                string `json:"id"`
-			InternalReference string `json:"internalReference"`
-		} `json:"data"`
-	}
-	if err := c.Get(ctx, "/v1/sites?limit=200", &sites); err != nil {
+	sites, err := GetAll[struct {
+		ID                string `json:"id"`
+		InternalReference string `json:"internalReference"`
+	}](ctx, c, "/v1/sites")
+	if err != nil {
 		return "", fmt.Errorf("reading sites: %w", err)
 	}
-	for _, s := range sites.Data {
+	for _, s := range sites {
 		if s.ID == c.siteID {
 			c.legacySite = s.InternalReference
 			return s.InternalReference, nil
