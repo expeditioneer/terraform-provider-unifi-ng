@@ -19,6 +19,7 @@ OpenAPI specs sourced from: **<https://beez.ly/unifi-apis/>**
 |----------|-------------|
 | `unifi_network` | `/v1/sites/{siteId}/networks` |
 | `unifi_firewall_policy` | `/v1/sites/{siteId}/firewall/policies` |
+| `unifi_firewall_policy_ordering` | `/v1/sites/{siteId}/firewall/policies/ordering` |
 | `unifi_firewall_zone` | `/v1/sites/{siteId}/firewall/zones` |
 | `unifi_dns_policy` | `/v1/sites/{siteId}/dns/policies` |
 | `unifi_traffic_matching_list` | `/v1/sites/{siteId}/traffic-matching-lists` |

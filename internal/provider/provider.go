@@ -104,6 +104,7 @@ func (p *UnifiProvider) Resources(_ context.Context) []func() resource.Resource 
 	return []func() resource.Resource{
 		resources.NewAccessPointResource,
 		resources.NewClientFixedIPResource,
+		resources.NewFirewallPolicyOrderingResource,
 		resources.NewFirewallPolicyResource,
 		resources.NewFirewallZoneResource,
 		resources.NewNetworkResource,
