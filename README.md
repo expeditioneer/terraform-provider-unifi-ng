@@ -49,29 +49,12 @@ resource "unifi_network" "iot" {
 ## Build
 
 ```bash
-# Install codegen tools (first time only)
-go install github.com/hashicorp/terraform-plugin-codegen-openapi/cmd/tfplugingen-openapi@latest
-go install github.com/hashicorp/terraform-plugin-codegen-framework/cmd/tfplugingen-framework@latest
-
-# Full pipeline: fetch latest spec → normalize → generate → build
-make update
-
-# Or step by step:
-make fetch      # download latest spec from beez.ly/unifi-apis/
-make normalize  # fix schema names for codegen compatibility
-make generate   # run codegen tools
-make build      # compile binary
+make build
 ```
 
 ## Updating for new UniFi API versions
 
-When Ubiquiti releases a new UniFi Network version with an updated OpenAPI spec on <https://beez.ly/unifi-apis/>:
-
-```bash
-make update
-```
-
-That's it. The pipeline will detect the new version, regenerate all schema types, and rebuild.
+Resources are written by hand. `make fetch` downloads the latest OpenAPI spec from <https://beez.ly/unifi-apis/> into `specs/` as reference; diff it against the previous version to find API changes.
 
 ## Status
 

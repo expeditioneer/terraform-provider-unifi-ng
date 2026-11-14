@@ -1,9 +1,6 @@
 # Build output
 terraform-provider-unifi
 
-# Normalized specs (generated, not committed)
-specs/*-normalized.json
-
 # Terraform test artifacts
 *.tfstate
 *.tfstate.backup
