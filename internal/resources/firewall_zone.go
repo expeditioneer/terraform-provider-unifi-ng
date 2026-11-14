@@ -108,6 +108,10 @@ func (r *FirewallZoneResource) Read(ctx context.Context, req resource.ReadReques
 	if err := r.client.Get(ctx,
 		fmt.Sprintf("/v1/sites/%s/firewall/zones/%s", r.client.SiteID(), state.ID.ValueString()),
 		&result); err != nil {
+		if client.IsNotFound(err) {
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		resp.Diagnostics.AddError("Error reading firewall zone", err.Error())
 		return
 	}
@@ -144,7 +148,7 @@ func (r *FirewallZoneResource) Delete(ctx context.Context, req resource.DeleteRe
 	}
 
 	if err := r.client.Delete(ctx,
-		fmt.Sprintf("/v1/sites/%s/firewall/zones/%s", r.client.SiteID(), state.ID.ValueString())); err != nil {
+		fmt.Sprintf("/v1/sites/%s/firewall/zones/%s", r.client.SiteID(), state.ID.ValueString())); err != nil && !client.IsNotFound(err) {
 		resp.Diagnostics.AddError("Error deleting firewall zone", err.Error())
 	}
 }

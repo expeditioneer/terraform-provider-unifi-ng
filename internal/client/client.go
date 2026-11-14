@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -121,10 +122,52 @@ func (c *Client) request(ctx context.Context, method, path string, body any) ([]
 	}
 
 	if resp.StatusCode >= 400 {
-		return nil, resp.StatusCode, fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
+		return nil, resp.StatusCode, &APIError{StatusCode: resp.StatusCode, Code: errorCode(respBody), Body: string(respBody)}
 	}
 
 	return respBody, resp.StatusCode, nil
+}
+
+// APIError is an error response of the Integration or the legacy API.
+type APIError struct {
+	StatusCode int
+	// Integration "code" or legacy "meta.msg", e.g. "api.resource-not-found".
+	Code string
+	Body string
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("API error %d: %s", e.StatusCode, e.Body)
+}
+
+func errorCode(body []byte) string {
+	var e struct {
+		Code string `json:"code"`
+		Meta struct {
+			Msg string `json:"msg"`
+		} `json:"meta"`
+	}
+	if json.Unmarshal(body, &e) != nil {
+		return ""
+	}
+	if e.Code != "" {
+		return e.Code
+	}
+	return e.Meta.Msg
+}
+
+// IsNotFound reports whether the controller says the object does not exist. It checks the
+// error code, not the status alone, because a wrong api_url also yields 404.
+func IsNotFound(err error) bool {
+	var e *APIError
+	if !errors.As(err, &e) {
+		return false
+	}
+	switch e.Code {
+	case "api.err.UnknownDevice", "api.resource-not-found":
+		return true
+	}
+	return false
 }
 
 // Get performs a GET request and unmarshals the response into out.

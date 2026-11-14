@@ -200,6 +200,10 @@ func (r *NetworkResource) Read(ctx context.Context, req resource.ReadRequest, re
 
 	var result map[string]any
 	if err := r.client.Get(ctx, r.networkPath(state.ID.ValueString()), &result); err != nil {
+		if client.IsNotFound(err) {
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		resp.Diagnostics.AddError("Error reading network", err.Error())
 		return
 	}
@@ -244,7 +248,7 @@ func (r *NetworkResource) Delete(ctx context.Context, req resource.DeleteRequest
 		return
 	}
 
-	if err := r.client.Delete(ctx, r.networkPath(state.ID.ValueString())); err != nil {
+	if err := r.client.Delete(ctx, r.networkPath(state.ID.ValueString())); err != nil && !client.IsNotFound(err) {
 		resp.Diagnostics.AddError("Error deleting network", err.Error())
 	}
 }

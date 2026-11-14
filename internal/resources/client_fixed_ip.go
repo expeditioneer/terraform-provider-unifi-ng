@@ -2,6 +2,7 @@ package resources
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -82,6 +83,8 @@ func (r *ClientFixedIPResource) find(ctx context.Context, mac string) (map[strin
 	return findClient(clients, mac), nil
 }
 
+var errUnknownClient = errors.New("no known client")
+
 func findClient(clients []map[string]any, mac string) map[string]any {
 	for _, c := range clients {
 		if m, _ := c["mac"].(string); strings.EqualFold(m, mac) {
@@ -97,7 +100,7 @@ func (r *ClientFixedIPResource) write(ctx context.Context, m ClientFixedIPModel,
 		return m, err
 	}
 	if current == nil {
-		return m, fmt.Errorf("no known client with MAC %s", m.MAC.ValueString())
+		return m, fmt.Errorf("%w with MAC %s", errUnknownClient, m.MAC.ValueString())
 	}
 	id, _ := current["_id"].(string)
 	if err := r.client.LegacyPut(ctx, "rest/user/"+id, payload, nil); err != nil {
@@ -173,7 +176,8 @@ func (r *ClientFixedIPResource) Delete(ctx context.Context, req resource.DeleteR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if _, err := r.write(ctx, state, map[string]any{"use_fixedip": false}); err != nil {
+	// A forgotten client has no reservation left to remove.
+	if _, err := r.write(ctx, state, map[string]any{"use_fixedip": false}); err != nil && !errors.Is(err, errUnknownClient) {
 		resp.Diagnostics.AddError("Error removing fixed IP", err.Error())
 	}
 }

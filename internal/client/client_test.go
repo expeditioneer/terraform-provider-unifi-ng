@@ -65,3 +65,35 @@ func TestDecodeLegacy(t *testing.T) {
 		t.Error("expected an error for rc=error")
 	}
 }
+
+func TestIsNotFound(t *testing.T) {
+	// Bodies as returned by UniFi Network for an unknown network ID and an unknown device MAC.
+	tests := []struct {
+		name   string
+		status int
+		body   string
+		want   bool
+	}{
+		{"integration", http.StatusNotFound, `{"statusCode":404,"statusName":"NOT_FOUND","code":"api.resource-not-found","message":"Requested resource does not exist"}`, true},
+		{"legacy device", http.StatusBadRequest, `{"meta":{"rc":"error","msg":"api.err.UnknownDevice"},"data":[]}`, true},
+		{"wrong path", http.StatusNotFound, `<html>Not Found</html>`, false},
+		{"other error", http.StatusBadRequest, `{"statusCode":400,"code":"api.request.invalid"}`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tt.status)
+				w.Write([]byte(tt.body))
+			}))
+			defer srv.Close()
+			c, err := New("key", srv.URL, "site", false, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = c.Get(context.Background(), "/v1/sites/site/networks/x", &map[string]any{})
+			if got := IsNotFound(err); got != tt.want {
+				t.Errorf("IsNotFound(%v) = %v, want %v", err, got, tt.want)
+			}
+		})
+	}
+}

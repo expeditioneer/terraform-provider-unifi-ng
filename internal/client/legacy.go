@@ -46,7 +46,7 @@ func decodeLegacy(body []byte, out any) error {
 		return fmt.Errorf("decoding legacy response: %w", err)
 	}
 	if env.Meta.RC != "ok" {
-		return fmt.Errorf("legacy API error: %s", env.Meta.Msg)
+		return &APIError{StatusCode: http.StatusOK, Code: env.Meta.Msg, Body: string(body)}
 	}
 	if out == nil {
 		return nil

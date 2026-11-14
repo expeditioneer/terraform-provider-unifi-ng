@@ -118,6 +118,10 @@ func (r *TrafficMatchingListResource) Read(ctx context.Context, req resource.Rea
 	}
 	var result tmlAPI
 	if err := r.client.Get(ctx, fmt.Sprintf("/v1/sites/%s/traffic-matching-lists/%s", r.client.SiteID(), state.ID.ValueString()), &result); err != nil {
+		if client.IsNotFound(err) {
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		resp.Diagnostics.AddError("Error reading traffic matching list", err.Error())
 		return
 	}
@@ -151,7 +155,7 @@ func (r *TrafficMatchingListResource) Delete(ctx context.Context, req resource.D
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if err := r.client.Delete(ctx, fmt.Sprintf("/v1/sites/%s/traffic-matching-lists/%s", r.client.SiteID(), state.ID.ValueString())); err != nil {
+	if err := r.client.Delete(ctx, fmt.Sprintf("/v1/sites/%s/traffic-matching-lists/%s", r.client.SiteID(), state.ID.ValueString())); err != nil && !client.IsNotFound(err) {
 		resp.Diagnostics.AddError("Error deleting traffic matching list", err.Error())
 	}
 }

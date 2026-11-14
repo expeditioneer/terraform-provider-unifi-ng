@@ -175,6 +175,10 @@ func (r *AccessPointResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 	device, err := r.get(ctx, state.MAC.ValueString())
+	if client.IsNotFound(err) {
+		resp.State.RemoveResource(ctx)
+		return
+	}
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading access point", err.Error())
 		return

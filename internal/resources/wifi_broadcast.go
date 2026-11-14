@@ -207,6 +207,10 @@ func (r *WifiBroadcastResource) Read(ctx context.Context, req resource.ReadReque
 	}
 	var result map[string]any
 	if err := r.client.Get(ctx, r.wifiPath(state.ID.ValueString()), &result); err != nil {
+		if client.IsNotFound(err) {
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		resp.Diagnostics.AddError("Error reading wifi broadcast", err.Error())
 		return
 	}
@@ -254,7 +258,7 @@ func (r *WifiBroadcastResource) Delete(ctx context.Context, req resource.DeleteR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if err := r.client.Delete(ctx, r.wifiPath(state.ID.ValueString())); err != nil {
+	if err := r.client.Delete(ctx, r.wifiPath(state.ID.ValueString())); err != nil && !client.IsNotFound(err) {
 		resp.Diagnostics.AddError("Error deleting wifi broadcast", err.Error())
 	}
 }

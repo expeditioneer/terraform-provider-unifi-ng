@@ -191,6 +191,10 @@ func (r *FirewallPolicyResource) Read(ctx context.Context, req resource.ReadRequ
 
 	var result firewallPolicyAPI
 	if err := r.client.Get(ctx, r.policyPath(state.ID.ValueString()), &result); err != nil {
+		if client.IsNotFound(err) {
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		resp.Diagnostics.AddError("Error reading firewall policy", err.Error())
 		return
 	}
@@ -241,7 +245,7 @@ func (r *FirewallPolicyResource) Delete(ctx context.Context, req resource.Delete
 		return
 	}
 
-	if err := r.client.Delete(ctx, r.policyPath(state.ID.ValueString())); err != nil {
+	if err := r.client.Delete(ctx, r.policyPath(state.ID.ValueString())); err != nil && !client.IsNotFound(err) {
 		resp.Diagnostics.AddError("Error deleting firewall policy", err.Error())
 	}
 }
