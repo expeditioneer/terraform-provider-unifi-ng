@@ -7,14 +7,11 @@ BINARY_NAME = terraform-provider-unifi
 
 ## build: Compile the provider binary
 build:
-	@echo "Building $(BINARY_NAME)..."
-	go mod tidy
 	go build -o $(BINARY_NAME) .
-	@echo "Built $(BINARY_NAME)"
 
 ## clean: Remove the binary
 clean:
-	rm -f $(BINARY_NAME)
+	rm --force $(BINARY_NAME)
 
 ## fetch: Download the latest UniFi OpenAPI spec as API reference
 fetch:
