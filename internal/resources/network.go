@@ -22,11 +22,9 @@ import (
 	"github.com/beezly/terraform-provider-unifi/internal/client"
 )
 
-// Ensure interface compliance.
 var _ resource.Resource = &NetworkResource{}
 var _ resource.ResourceWithImportState = &NetworkResource{}
 
-// NetworkResource implements the unifi_network resource.
 type NetworkResource struct {
 	client *client.Client
 }
@@ -35,7 +33,6 @@ func NewNetworkResource() resource.Resource {
 	return &NetworkResource{}
 }
 
-// NetworkModel maps to the UniFi network API response.
 type NetworkModel struct {
 	ID                              types.String `tfsdk:"id"`
 	Name                            types.String `tfsdk:"name"`
@@ -429,7 +426,6 @@ func int64At(m map[string]any, keys ...string) types.Int64 {
 	return types.Int64Null()
 }
 
-// networkToModel maps an API network object into the Terraform model.
 func networkToModel(ctx context.Context, p map[string]any, m *NetworkModel) diag.Diagnostics {
 	var diags diag.Diagnostics
 

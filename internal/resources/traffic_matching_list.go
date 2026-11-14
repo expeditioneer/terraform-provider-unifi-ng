@@ -32,7 +32,6 @@ func NewTrafficMatchingListResource() resource.Resource {
 	return &TrafficMatchingListResource{}
 }
 
-// TrafficMatchingListModel is the Terraform schema model.
 type TrafficMatchingListModel struct {
 	ID    types.String `tfsdk:"id"`
 	Name  types.String `tfsdk:"name"`

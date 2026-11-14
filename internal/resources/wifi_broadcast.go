@@ -39,13 +39,13 @@ type PresharedKey struct {
 
 type WifiBroadcastModel struct {
 	ID                  types.String   `tfsdk:"id"`
-	Type                types.String   `tfsdk:"type"` // STANDARD | IOT_OPTIMIZED
+	Type                types.String   `tfsdk:"type"`
 	Name                types.String   `tfsdk:"name"`
 	Enabled             types.Bool     `tfsdk:"enabled"`
-	NetworkID           types.String   `tfsdk:"network_id"`     // simple single-network SSIDs
-	PresharedKeys       []PresharedKey `tfsdk:"preshared_keys"` // multi-PSK SSIDs
+	NetworkID           types.String   `tfsdk:"network_id"`
+	PresharedKeys       []PresharedKey `tfsdk:"preshared_keys"`
 	SecurityType        types.String   `tfsdk:"security_type"`
-	Passphrase          types.String   `tfsdk:"passphrase"` // sensitive; null for multi-PSK
+	Passphrase          types.String   `tfsdk:"passphrase"`
 	HideName            types.Bool     `tfsdk:"hide_name"`
 	ClientIsolation     types.Bool     `tfsdk:"client_isolation"`
 	BandSteering        types.Bool     `tfsdk:"band_steering"` // STANDARD only
@@ -463,7 +463,6 @@ func boolOrFalse(p map[string]any, keys ...string) types.Bool {
 	return types.BoolValue(false)
 }
 
-// wifiToModel maps an API WiFi broadcast object into the Terraform model.
 func wifiToModel(ctx context.Context, p map[string]any, m *WifiBroadcastModel) diag.Diagnostics {
 	var diags diag.Diagnostics
 

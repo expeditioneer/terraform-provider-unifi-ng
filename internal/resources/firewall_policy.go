@@ -30,7 +30,6 @@ func NewFirewallPolicyResource() resource.Resource {
 	return &FirewallPolicyResource{}
 }
 
-// FirewallPolicyModel is the Terraform schema model.
 type FirewallPolicyModel struct {
 	ID                 types.String `tfsdk:"id"`
 	Name               types.String `tfsdk:"name"`
@@ -40,10 +39,10 @@ type FirewallPolicyModel struct {
 	AllowReturnTraffic types.Bool   `tfsdk:"allow_return_traffic"`
 	SourceZoneID       types.String `tfsdk:"source_zone_id"`
 	DestinationZoneID  types.String `tfsdk:"destination_zone_id"`
-	SourceFilter       types.String `tfsdk:"source_filter"`      // JSON blob, optional
-	DestinationFilter  types.String `tfsdk:"destination_filter"` // JSON blob, optional
+	SourceFilter       types.String `tfsdk:"source_filter"`
+	DestinationFilter  types.String `tfsdk:"destination_filter"`
 	IPVersion          types.String `tfsdk:"ip_version"`
-	Protocol           types.String `tfsdk:"protocol"` // TCP | UDP | etc., optional
+	Protocol           types.String `tfsdk:"protocol"`
 	LoggingEnabled     types.Bool   `tfsdk:"logging_enabled"`
 	ReportFlowEnabled  types.Bool   `tfsdk:"report_flow_enabled"`
 }
@@ -51,7 +50,6 @@ type FirewallPolicyModel struct {
 // Fields returned by GET that the create/update request does not accept.
 var policyReadOnlyKeys = []string{"id", "index", "metadata"}
 
-// firewallPolicyAPI is the API response.
 type firewallPolicyAPI struct {
 	ID              string                 `json:"id,omitempty"`
 	Name            string                 `json:"name"`
@@ -337,7 +335,6 @@ func applyPolicyEndpoint(e map[string]any, zoneID, filter types.String, attr str
 	return nil
 }
 
-// policyAPIToModel maps the API response back to the Terraform model.
 func policyAPIToModel(p *firewallPolicyAPI, m *FirewallPolicyModel) error {
 	m.ID = types.StringValue(p.ID)
 	m.Name = types.StringValue(p.Name)
@@ -357,7 +354,6 @@ func policyAPIToModel(p *firewallPolicyAPI, m *FirewallPolicyModel) error {
 		m.ReportFlowEnabled = types.BoolValue(*p.ReportFlowEnabled)
 	}
 
-	// Action
 	if p.Action != nil {
 		if t, ok := p.Action["type"].(string); ok {
 			m.ActionType = types.StringValue(t)
@@ -369,7 +365,6 @@ func policyAPIToModel(p *firewallPolicyAPI, m *FirewallPolicyModel) error {
 		}
 	}
 
-	// Source zone + filter
 	if p.Source != nil {
 		if zid, ok := p.Source["zoneId"].(string); ok {
 			m.SourceZoneID = types.StringValue(zid)
@@ -381,7 +376,6 @@ func policyAPIToModel(p *firewallPolicyAPI, m *FirewallPolicyModel) error {
 		m.SourceFilter = f
 	}
 
-	// Destination zone + filter
 	if p.Destination != nil {
 		if zid, ok := p.Destination["zoneId"].(string); ok {
 			m.DestinationZoneID = types.StringValue(zid)
@@ -393,7 +387,6 @@ func policyAPIToModel(p *firewallPolicyAPI, m *FirewallPolicyModel) error {
 		m.DestinationFilter = f
 	}
 
-	// IP protocol scope
 	if p.IPProtocolScope != nil {
 		if ver, ok := p.IPProtocolScope["ipVersion"].(string); ok {
 			m.IPVersion = types.StringValue(ver)

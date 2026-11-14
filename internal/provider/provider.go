@@ -18,7 +18,6 @@ import (
 	"github.com/beezly/terraform-provider-unifi/internal/resources"
 )
 
-// Ensure UnifiProvider satisfies various provider interfaces.
 var _ provider.Provider = &UnifiProvider{}
 
 type UnifiProvider struct {
