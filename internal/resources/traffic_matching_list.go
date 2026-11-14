@@ -3,13 +3,18 @@ package resources
 import (
 	"context"
 	"fmt"
+	"net/netip"
+	"strconv"
+	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/beezly/terraform-provider-unifi/internal/client"
@@ -17,6 +22,7 @@ import (
 
 var _ resource.Resource = &TrafficMatchingListResource{}
 var _ resource.ResourceWithImportState = &TrafficMatchingListResource{}
+var _ resource.ResourceWithValidateConfig = &TrafficMatchingListResource{}
 
 type TrafficMatchingListResource struct {
 	client *client.Client
@@ -30,16 +36,16 @@ func NewTrafficMatchingListResource() resource.Resource {
 type TrafficMatchingListModel struct {
 	ID    types.String `tfsdk:"id"`
 	Name  types.String `tfsdk:"name"`
-	Type  types.String `tfsdk:"type"`  // PORTS | IP_ADDRESSES
-	Items types.List   `tfsdk:"items"` // list of strings — port numbers or CIDRs/IPs
+	Type  types.String `tfsdk:"type"`
+	Items types.List   `tfsdk:"items"`
 }
 
-// tmlAPIItem represents one entry in the list.
+// tmlAPIItem holds ports as numbers and addresses as strings; decoded ports are float64, which fmt prints as integers.
 type tmlAPIItem struct {
-	Type  string `json:"type"`            // PORT_NUMBER | PORT_RANGE | IP_ADDRESS | IP_SUBNET
-	Value any    `json:"value,omitempty"` // int for ports, string for IPs
-	From  *int   `json:"from,omitempty"`  // port range start
-	To    *int   `json:"to,omitempty"`    // port range end
+	Start any    `json:"start,omitempty"`
+	Stop  any    `json:"stop,omitempty"`
+	Type  string `json:"type"`
+	Value any    `json:"value,omitempty"`
 }
 
 type tmlAPI struct {
@@ -67,14 +73,30 @@ func (r *TrafficMatchingListResource) Schema(_ context.Context, _ resource.Schem
 			},
 			"type": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "List type: `PORTS` or `IP_ADDRESSES`.",
+				MarkdownDescription: "List type: `PORTS`, `IPV4_ADDRESSES` or `IPV6_ADDRESSES`.",
+				Validators:          []validator.String{stringvalidator.OneOf("IPV4_ADDRESSES", "IPV6_ADDRESSES", "PORTS")},
 			},
 			"items": schema.ListAttribute{
 				ElementType:         types.StringType,
 				Required:            true,
-				MarkdownDescription: "List items. For `PORTS`: port numbers or ranges like `8080`, `8000-8999`. For `IP_ADDRESSES`: IPs or CIDRs like `192.168.1.1`, `10.0.0.0/8`.",
+				MarkdownDescription: "List items. `PORTS`: `8080` or `8000-8999`. `IPV4_ADDRESSES`: `192.168.1.1`, `10.0.0.0/8` or `192.168.1.10-192.168.1.20`. `IPV6_ADDRESSES`: addresses or subnets in CIDR notation.",
 			},
 		},
+	}
+}
+
+func (r *TrafficMatchingListResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var m TrafficMatchingListModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &m)...)
+	if resp.Diagnostics.HasError() || !known(m.Type) || m.Items.IsUnknown() {
+		return
+	}
+	for i, e := range m.Items.Elements() {
+		if s, ok := e.(types.String); ok && known(s) {
+			if _, err := parseTMLItem(m.Type.ValueString(), s.ValueString()); err != nil {
+				resp.Diagnostics.AddAttributeError(path.Root("items").AtListIndex(i), "Invalid item", err.Error())
+			}
+		}
 	}
 }
 
@@ -170,70 +192,93 @@ func tmlModelToAPI(ctx context.Context, m TrafficMatchingListModel) (*tmlAPI, di
 	if d.HasError() {
 		return nil, d
 	}
-
 	p := &tmlAPI{Name: m.Name.ValueString(), Type: m.Type.ValueString()}
-	for _, s := range strs {
-		if m.Type.ValueString() == "PORTS" {
-			// Check for range "8000-8999"
-			var from, to int
-			if n, _ := fmt.Sscanf(s, "%d-%d", &from, &to); n == 2 {
-				f, t := from, to
-				p.Items = append(p.Items, tmlAPIItem{Type: "PORT_RANGE", From: &f, To: &t})
-			} else {
-				var port int
-				fmt.Sscanf(s, "%d", &port)
-				p.Items = append(p.Items, tmlAPIItem{Type: "PORT_NUMBER", Value: port})
-			}
-		} else {
-			// IP_ADDRESSES / IPV6_ADDRESSES — detect subnet vs single IP
-			if contains(s, "/") {
-				p.Items = append(p.Items, tmlAPIItem{Type: "IP_SUBNET", Value: s})
-			} else {
-				p.Items = append(p.Items, tmlAPIItem{Type: "IP_ADDRESS", Value: s})
-			}
+	for i, s := range strs {
+		item, err := parseTMLItem(p.Type, s)
+		if err != nil {
+			d.AddAttributeError(path.Root("items").AtListIndex(i), "Invalid item", err.Error())
+			continue
 		}
+		p.Items = append(p.Items, item)
 	}
-	return p, nil
+	return p, d
+}
+
+func parseTMLItem(listType, s string) (tmlAPIItem, error) {
+	start, stop, isRange := strings.Cut(s, "-")
+	switch listType {
+	case "PORTS":
+		if !isRange {
+			port, err := parsePort(s)
+			return tmlAPIItem{Type: "PORT_NUMBER", Value: port}, err
+		}
+		from, err := parsePort(start)
+		if err != nil {
+			return tmlAPIItem{}, err
+		}
+		to, err := parsePort(stop)
+		return tmlAPIItem{Type: "PORT_NUMBER_RANGE", Start: from, Stop: to}, err
+	case "IPV4_ADDRESSES", "IPV6_ADDRESSES":
+		v4 := listType == "IPV4_ADDRESSES"
+		if isRange {
+			if !v4 {
+				return tmlAPIItem{}, fmt.Errorf("%q: address ranges are only supported in IPV4_ADDRESSES", s)
+			}
+			for _, a := range []string{start, stop} {
+				if addr, err := netip.ParseAddr(a); err != nil || !addr.Is4() {
+					return tmlAPIItem{}, fmt.Errorf("%q: %q is not an IPv4 address", s, a)
+				}
+			}
+			return tmlAPIItem{Type: "IP_ADDRESS_RANGE", Start: start, Stop: stop}, nil
+		}
+		if strings.Contains(s, "/") {
+			prefix, err := netip.ParsePrefix(s)
+			if err != nil || prefix.Addr().Is4() != v4 {
+				return tmlAPIItem{}, fmt.Errorf("%q is not an %s subnet in CIDR notation", s, ipFamily(v4))
+			}
+			return tmlAPIItem{Type: "SUBNET", Value: s}, nil
+		}
+		addr, err := netip.ParseAddr(s)
+		if err != nil || addr.Is4() != v4 {
+			return tmlAPIItem{}, fmt.Errorf("%q is not an %s address", s, ipFamily(v4))
+		}
+		return tmlAPIItem{Type: "IP_ADDRESS", Value: s}, nil
+	}
+	return tmlAPIItem{}, fmt.Errorf("unsupported list type %q", listType)
+}
+
+func parsePort(s string) (int, error) {
+	port, err := strconv.Atoi(s)
+	if err != nil || port < 1 || port > 65535 {
+		return 0, fmt.Errorf("%q is not a port between 1 and 65535", s)
+	}
+	return port, nil
+}
+
+func ipFamily(v4 bool) string {
+	if v4 {
+		return "IPv4"
+	}
+	return "IPv6"
 }
 
 func tmlAPIToModel(ctx context.Context, p *tmlAPI, m *TrafficMatchingListModel) diag.Diagnostics {
+	var d diag.Diagnostics
 	m.ID = types.StringValue(p.ID)
 	m.Name = types.StringValue(p.Name)
 	m.Type = types.StringValue(p.Type)
-
-	var strs []string
+	strs := []string{}
 	for _, item := range p.Items {
 		switch item.Type {
-		case "PORT_NUMBER":
-			// Value comes back as float64 from JSON
-			switch v := item.Value.(type) {
-			case float64:
-				strs = append(strs, fmt.Sprintf("%d", int(v)))
-			default:
-				strs = append(strs, fmt.Sprintf("%v", v))
-			}
-		case "PORT_RANGE":
-			if item.From != nil && item.To != nil {
-				strs = append(strs, fmt.Sprintf("%d-%d", *item.From, *item.To))
-			}
-		case "IP_ADDRESS", "IP_SUBNET", "SUBNET":
-			strs = append(strs, fmt.Sprintf("%v", item.Value))
+		case "IP_ADDRESS", "PORT_NUMBER", "SUBNET":
+			strs = append(strs, fmt.Sprint(item.Value))
+		case "IP_ADDRESS_RANGE", "PORT_NUMBER_RANGE":
+			strs = append(strs, fmt.Sprintf("%v-%v", item.Start, item.Stop))
+		default:
+			d.AddError("Unsupported traffic matching list item", fmt.Sprintf("Item type %q is not supported by this provider.", item.Type))
 		}
 	}
-	listVal, d := types.ListValueFrom(ctx, types.StringType, strs)
-	m.Items = listVal
-	return d
-}
-
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || len(s) > 0 && containsAt(s, sub))
-}
-
-func containsAt(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
+	items, dd := types.ListValueFrom(ctx, types.StringType, strs)
+	m.Items = items
+	return append(d, dd...)
 }
