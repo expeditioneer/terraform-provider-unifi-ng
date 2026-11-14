@@ -27,3 +27,9 @@ func TestSettingValuesKeepsPriorFormatting(t *testing.T) {
 		t.Errorf("got %v", got)
 	}
 }
+
+func TestSettingValuesAfterImport(t *testing.T) {
+	if got, err := settingValues(map[string]any{"timezone": "UTC"}, "{}"); err != nil || got.ValueString() != "{}" {
+		t.Errorf("got %v, %v", got, err)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -18,6 +19,7 @@ import (
 // The Integration API cannot write site settings yet, so this resource uses the legacy API.
 
 var _ resource.Resource = &SettingResource{}
+var _ resource.ResourceWithImportState = &SettingResource{}
 
 type SettingResource struct {
 	client *client.Client
@@ -41,7 +43,7 @@ func (r *SettingResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages fields of a site setting (e.g. `ntp`, `country`) through the legacy controller API. " +
 			"Only the fields in `values` are compared and written, and only when they differ. " +
-			"Removing the resource leaves the setting untouched.",
+			"Removing the resource leaves the setting untouched. Import by key, e.g. `ntp`.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
@@ -194,4 +196,14 @@ func (r *SettingResource) Update(ctx context.Context, req resource.UpdateRequest
 }
 
 func (r *SettingResource) Delete(_ context.Context, _ resource.DeleteRequest, _ *resource.DeleteResponse) {
+}
+
+// ImportState takes the setting key; no field is managed until the config lists it in values.
+func (r *SettingResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	if req.ID == "" {
+		resp.Diagnostics.AddError("Invalid import ID", "Expected the setting key, e.g. ntp.")
+		return
+	}
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("key"), req.ID)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("values"), "{}")...)
 }
