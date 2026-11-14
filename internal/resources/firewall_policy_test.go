@@ -115,3 +115,16 @@ func TestFilterValueKeepsEquivalentPrior(t *testing.T) {
 		t.Errorf("got %v", got)
 	}
 }
+
+func TestPolicyCreatePayloadCarriesProtocol(t *testing.T) {
+	m := readPolicyModel(t, decode(t, policyFixture))
+	m.Protocol = types.StringValue("UDP")
+	payload := map[string]any{}
+	if err := applyPolicyModel(m, payload); err != nil {
+		t.Fatal(err)
+	}
+	scope := payload["ipProtocolScope"].(map[string]any)
+	if scope["ipVersion"] != "IPV4" || stringAt(scope, "protocolFilter", "protocol", "name").ValueString() != "UDP" {
+		t.Errorf("got ipProtocolScope %v", scope)
+	}
+}

@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/beezly/terraform-provider-unifi/internal/client"
@@ -40,8 +42,8 @@ type FirewallPolicyModel struct {
 	DestinationZoneID  types.String `tfsdk:"destination_zone_id"`
 	SourceFilter       types.String `tfsdk:"source_filter"`      // JSON blob, optional
 	DestinationFilter  types.String `tfsdk:"destination_filter"` // JSON blob, optional
-	IPVersion          types.String `tfsdk:"ip_version"`         // IPV4 | IPV6 | IPV4_AND_IPV6
-	Protocol           types.String `tfsdk:"protocol"`           // TCP | UDP | etc., optional
+	IPVersion          types.String `tfsdk:"ip_version"`
+	Protocol           types.String `tfsdk:"protocol"` // TCP | UDP | etc., optional
 	LoggingEnabled     types.Bool   `tfsdk:"logging_enabled"`
 	ReportFlowEnabled  types.Bool   `tfsdk:"report_flow_enabled"`
 }
@@ -119,9 +121,9 @@ func (r *FirewallPolicyResource) Schema(_ context.Context, _ resource.SchemaRequ
 				MarkdownDescription: "JSON traffic filter for the destination (ports, IPs, TMLs). Omit for zone-wide match.",
 			},
 			"ip_version": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
+				Required:            true,
 				MarkdownDescription: "IP version scope: `IPV4`, `IPV6`, or `IPV4_AND_IPV6`.",
+				Validators:          []validator.String{stringvalidator.OneOf("IPV4", "IPV4_AND_IPV6", "IPV6")},
 			},
 			"protocol": schema.StringAttribute{
 				Optional:            true,
@@ -304,18 +306,16 @@ func applyPolicyModel(m FirewallPolicyModel, p map[string]any) error {
 		return err
 	}
 
-	if known(m.IPVersion) && m.IPVersion.ValueString() != "" {
-		scope := child(p, "ipProtocolScope")
-		scope["ipVersion"] = m.IPVersion.ValueString()
-		if known(m.Protocol) && m.Protocol.ValueString() != "" {
-			scope["protocolFilter"] = map[string]any{
-				"type":          "NAMED_PROTOCOL",
-				"protocol":      map[string]any{"name": m.Protocol.ValueString()},
-				"matchOpposite": false,
-			}
-		} else if stringAt(scope, "protocolFilter", "type").ValueString() == "NAMED_PROTOCOL" {
-			delete(scope, "protocolFilter")
+	scope := child(p, "ipProtocolScope")
+	scope["ipVersion"] = m.IPVersion.ValueString()
+	if known(m.Protocol) && m.Protocol.ValueString() != "" {
+		scope["protocolFilter"] = map[string]any{
+			"type":          "NAMED_PROTOCOL",
+			"protocol":      map[string]any{"name": m.Protocol.ValueString()},
+			"matchOpposite": false,
 		}
+	} else if stringAt(scope, "protocolFilter", "type").ValueString() == "NAMED_PROTOCOL" {
+		delete(scope, "protocolFilter")
 	}
 
 	return nil
