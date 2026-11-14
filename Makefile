@@ -18,7 +18,7 @@ clean:
 
 ## fetch: Download the latest UniFi OpenAPI spec as API reference
 fetch:
-	@bash scripts/fetch-spec.sh
+	@scripts/fetch-spec
 
 ## help: Show this help
 help:
